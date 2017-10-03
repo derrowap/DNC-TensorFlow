@@ -12,6 +12,7 @@ TO ADD TESTS:
 import unittest
 
 from . testing import dnc_test
+from . testing import read_head_test
 from . testing import write_head_test
 
 def suite():
@@ -20,6 +21,7 @@ def suite():
     # All test suites found in the 'testing/' directory.
     suite.addTests([
         dnc_test.suite(),
+        read_head_test.suite(),
         write_head_test.suite(),
     ])
 
