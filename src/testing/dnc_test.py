@@ -6,6 +6,11 @@ import unittest
 
 from .. dnc.dnc import DNC
 
+def suite():
+    suite = unittest.TestSuite()
+    suite.addTest(DNCTest('test_construction'))
+    return suite
+
 class DNCTest(unittest.TestCase):
     
     def test_construction(self):

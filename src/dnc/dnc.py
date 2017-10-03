@@ -27,11 +27,12 @@ class DNC(snt.RNNCore):
         """Initializes the DNC core.
         
         Args:
-            controller_config: dictionary containing controller module
+            controller_config: The dictionary containing controller module
                 configurations.
-            memory_config: dictionary containing memory module configurations.
-            output_size: output dimension size of this core module.
-            name: module name (default 'dnc').
+            memory_config: The dictionary containing memory module
+                configurations.
+            output_size: The output dimension size of this core module.
+            name: The name of the module (default 'dnc').
         """
         super(DNC, self).__init__(name=name)
         
@@ -55,6 +56,10 @@ class DNC(snt.RNNCore):
             inputs: Tensor input.
             prev_state: A 'DNCState' containing the fields 'memory output',
                 'memory_state', and 'controller_state'.
+        Returns:
+            A tuple (output, next_state), where 'output' is used as the raw
+            output to the task trained on. The 'next_state' is the next state
+            of the DNC after computation of this timestep finishes.
         """
         return [], prev_state
     
@@ -69,12 +74,14 @@ class DNC(snt.RNNCore):
         return tf.TensorShape([self._output_size])
     
     def initial_state(self, batch_size, dtype=tf.float32):
-        """Returns an initial state, for a batch size and data type.
+        """Computes an initial state for the DNC.
         
         Args:
-            batch_size: the batch size for each state.
-            dtype: the data type of the elements in the state (default is
+            batch_size: The batch size for each state.
+            dtype: The data type of the elements in the state (default is
                 tf.float32).
+        Returns:
+            An initial instance of 'DNCState' with default values.
         """
         return DNCState(
             memory_output=self._memory_output_size,
