@@ -11,6 +11,6 @@ You can currently run the tests for DNC by executing:
 Alternatively, you can execute individual tests by executing:
 ```
 /DNC-TensorFlow$ python3 -m src.testing.dnc_test
-/DNC-TensorFlow$ python3 -m src.testing.write_head_test
+/DNC-TensorFlow$ python3 -m src.testing.tape_head_test
 ```
 
