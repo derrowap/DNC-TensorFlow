@@ -13,8 +13,8 @@ import sonnet as snt
 import tensorflow as tf
 from collections import namedtuple
 
-DNCState = namedtuple('DNCState', ('memory_output', 'memory_state',
-                                   'controller_state'))
+DNCState = namedtuple('DNCState', (
+    'memory_output', 'memory_state', 'controller_state'))
 
 class DNC(snt.RNNCore):
     """DNC core module."""
@@ -45,9 +45,9 @@ class DNC(snt.RNNCore):
         self._controller_state_size = 0
         
         self._state_size = DNCState(
-            memory_output=self._memory_output_size,
-            memory_state=self._memory_state_size,
-            controller_state=self._controller_state_size)
+            memory_output=tf.TensorShape([self._memory_output_size]),
+            memory_state=tf.TensorShape([self._memory_state_size]),
+            controller_state=tf.TensorShape([self._controller_state_size]))
         
     def _build(self, inputs, prev_state):
         """Computes one timestep of computation with a TF graph with DNC core.
@@ -83,7 +83,4 @@ class DNC(snt.RNNCore):
         Returns:
             An initial instance of 'DNCState' with default values.
         """
-        return DNCState(
-            memory_output=self._memory_output_size,
-            memory_state=self._memory_state_size,
-            controller_state=self._controller_state_size)
+        return self._state_size
