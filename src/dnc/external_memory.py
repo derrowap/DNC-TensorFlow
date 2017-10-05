@@ -11,6 +11,9 @@ import collections
 import sonnet as snt
 import tensorflow as tf
 
+# Ensure values are greater than epsilon to avoid numerical instability.
+_EPSILON = 1e-6
+
 ExternalMemoryState = collections.namedtuple('ExternalMemoryState', (
     'memory'))
 
@@ -64,6 +67,25 @@ class ExternalMemory(snt.RNNCore):
             this Tape Head after computation finishes.
         """
         return prev_state
+    
+    def cosine_similarity(self, u, v):
+        """Computes the cosine similarity between two vectors, 'u' and 'v'.
+        
+        Cosine similarity here is defined as in the DNC paper:
+            D(u, v) = (u * v) / (|u| * |v|)
+        The resulting similarity ranges from -1 meaning exactly opposite, to
+        1 meaning exactly the same.
+        
+        Args:
+            u: A 2-D Tensor of shape '[batch_size, word_size]'.
+            v: A 2-D Tensor of shape '[batch_size, word_size]'.
+        Returns:
+            A Tensor of shape '[batch_size]' containing the cosine similarity
+            for the two input vectors, u and v.
+        """
+        dot = tf.reduce_sum(tf.multiply(u, v), 1)
+        norm = tf.norm(u, ord='euclidean', axis=1) * tf.norm(v, ord='euclidean', axis=1)
+        return dot / (norm + tf.constant(_EPSILON))
     
     @property
     def state_size(self):
