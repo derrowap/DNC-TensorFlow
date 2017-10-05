@@ -11,7 +11,8 @@ TO ADD TESTS:
 
 import unittest
 
-from . testing import dnc_test, tape_head_test, temporal_linkage_test
+from . testing import dnc_test, external_memory_test, tape_head_test, \
+    temporal_linkage_test
 
 def suite():
     suite = unittest.TestSuite()
@@ -19,6 +20,7 @@ def suite():
     # All test suites found in the 'testing/' directory.
     suite.addTests([
         dnc_test.suite(),
+        external_memory_test.suite(),
         tape_head_test.suite(),
         temporal_linkage_test.suite(),
     ])
