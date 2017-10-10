@@ -51,25 +51,47 @@ class ExternalMemory(snt.RNNCore):
         self._state_size = ExternalMemoryState(
             memory=tf.TensorShape([self._memory_size, self._word_size]))
     
-    def _build(self, inputs, prev_state):
+    def _build(self,
+               read_keys,
+               read_strengths,
+               prev_state):
         """Computes one timestep of computation for the External Memory.
         
+        Content based addressing starts with calculating the cosine
+        similarity between the input read keys and the current state of
+        memory. The content vector, `c_t`, at time `t` is outputed by
+        taking the softmax of the product between the cosine similarity and
+        the input read strengths.
+        
         Args:
-            inputs: A Tensor of shape [batch_size, input_size] emitted from
-                the DNC controller. This holds data that controls what this
-                external memory should do.
-            prev_state: An instance of 'ExternalMemoryState' containing the
+            read_keys: A Tensor of shape `[word_size]` containing the read
+                keys from the Read Head originally emitted by the DNC
+                controller. These are compared to each slot in the external
+                memory for content based addressing.
+            read_strengths: A Tensor of shape `[memory_size]` containing the
+                strength at which the `c_t` vector should favor each slot in
+                external memory. If `read_strengths[i]` is high, then
+                `c_t[i]` will be greater than if `read_strengths[i]` was a
+                small value. The values are bound to the interval [1, inf).
+            prev_state: An instance of `ExternalMemoryState` containing the
                 previous state of this External Memory.
         Returns:
             A tuple `(output, next_state)`. Where `output` is a Tensor of
             the content based addressing weightings. The `next_state` is
-            an instance of 'TapeHeadState' representing the next state of
-            this Tape Head after computation finishes.
+            an instance of `ExternalMemoryState` representing the next state
+            of this External Memory after computation finishes.
         """
-        return prev_state
+        repeated_read_keys = tf.reshape(tf.tile(read_keys,
+                                                [self._memory_size]),
+                                        [self._memory_size, self._word_size])
+        content_similarity = self.cosine_similarity(repeated_read_keys,
+                                                    prev_state.memory)
+        c_t = tf.nn.softmax(tf.multiply(content_similarity, read_strengths))
+        
+        return (c_t, prev_state)
     
     def cosine_similarity(self, u, v):
-        """Computes the cosine similarity between two vectors, 'u' and 'v'.
+        """Computes the cosine similarity between two vectors, `u` and `v`.
         
         Cosine similarity here is defined as in the DNC paper:
             D(u, v) = (u * v) / (|u| * |v|)
@@ -77,11 +99,11 @@ class ExternalMemory(snt.RNNCore):
         1 meaning exactly the same.
         
         Args:
-            u: A 2-D Tensor of shape '[batch_size, word_size]'.
-            v: A 2-D Tensor of shape '[batch_size, word_size]'.
+            u: A 2-D Tensor of shape `[batch_size, word_size]`.
+            v: A 2-D Tensor of shape `[batch_size, word_size]`.
         Returns:
-            A Tensor of shape '[batch_size]' containing the cosine similarity
-            for the two input vectors, u and v.
+            A Tensor of shape `[batch_size]` containing the cosine similarity
+            for the two input vectors, `u` and `v`.
         """
         dot = tf.reduce_sum(tf.multiply(u, v), 1)
         norm = tf.norm(u, ord='euclidean', axis=1) * tf.norm(v, ord='euclidean', axis=1)
@@ -91,3 +113,8 @@ class ExternalMemory(snt.RNNCore):
     def state_size(self):
         """Returns a description of the state size."""
         return self._state_size
+    
+    @property
+    def output_size(self):
+        """Returns the output shape."""
+        return tf.TensorShape([self._memory_size])
