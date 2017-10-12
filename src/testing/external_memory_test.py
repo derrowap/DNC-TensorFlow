@@ -4,6 +4,7 @@ import tensorflow as tf
 import unittest
 
 from .. dnc import external_memory
+from numpy.testing import assert_array_almost_equal
 
 
 def suite():
@@ -172,6 +173,91 @@ class ExternalMemoryTest(unittest.TestCase):
                                             batch_num, index2, j,
                                             c_t[batch_num][index2][j]))
                         batch_num += 1
+
+    def test_write_operation(self):
+        """Test writing in external memory."""
+        graph = tf.Graph()
+        with graph.as_default():
+            with tf.Session(graph=graph) as sess:
+                tests = [
+                    {  # do not erase or add memory, stay the same
+                        'memory': [[[1, 2, 3], [4, 5, 6]],
+                                   [[8, 9, 10], [11, 12, 13]]],
+                        'write_weightings': [[0, 0], [0, 0]],
+                        'erase_vector': [[0, 0, 0], [0, 0, 0]],
+                        'write_vector': [[0, 0, 0], [0, 0, 0]],
+                        'expected': [[[1, 2, 3], [4, 5, 6]],
+                                     [[8, 9, 10], [11, 12, 13]]],
+                    }, {  # basic write operation
+                        'memory': [[[0, 0, 0], [0, 0, 0], [0, 0, 0]]],
+                        'write_weightings': [[1, 1, 1]],
+                        'erase_vector': [[0, 0, 0]],
+                        'write_vector': [[1, 1, 1]],
+                        'expected': [[[1, 1, 1], [1, 1, 1], [1, 1, 1]]],
+                    }, {  # tests multiple batches
+                        'memory': [[[0, 0], [0, 0]],
+                                   [[0, 0], [0, 0]],
+                                   [[0, 0], [0, 0]]],
+                        'write_weightings': [[1, 1], [1, 1], [1, 1]],
+                        'erase_vector': [[0, 0], [0, 0], [0, 0]],
+                        'write_vector': [[1, 2], [3, 4], [5, 6]],
+                        'expected': [[[1, 2], [1, 2]],
+                                     [[3, 4], [3, 4]],
+                                     [[5, 6], [5, 6]]],
+                    }, {  # write weightings heighten written values in add
+                        'memory': [[[0, 0], [0, 0]]],
+                        'write_weightings': [[1, 2]],
+                        'erase_vector': [[0, 0]],
+                        'write_vector': [[1, 1]],
+                        'expected': [[[1, 1], [2, 2]]],
+                    }, {  # erase vector erases correct positions
+                        'memory': [[[1, 2], [3, 4]]],
+                        'write_weightings': [[1, 1]],
+                        'erase_vector': [[.5, 1]],  # 0.5 erases half the value
+                        'write_vector': [[0, 0]],
+                        'expected': [[[.5, 0], [1.5, 0]]],
+                    }, {  # write weighting of 0 prevents erase to that slot
+                        'memory': [[[1, 2], [3, 4]]],
+                        'write_weightings': [[0, 1]],
+                        'erase_vector': [[.5, 1]],
+                        'write_vector': [[0, 0]],
+                        'expected': [[[1, 2], [1.5, 0]]],
+                    }, {  # write weighting of 0 prevents adding to that slot
+                        'memory': [[[0, 0], [0, 0]]],
+                        'write_weightings': [[1, 0]],
+                        'erase_vector': [[0, 0]],
+                        'write_vector': [[1, 1]],
+                        'expected': [[[1, 1], [0, 0]]],
+                    }, {  # write weighting heightens erase operation
+                        'memory': [[[1, 1], [1, 1]]],
+                        'write_weightings': [[.5, 1.5]],
+                        'erase_vector': [[.2, .5]],
+                        'write_vector': [[0, 0]],
+                        'expected': [[[.9, .75], [.7, .25]]],
+                    }, {  # write and erase at same time
+                        'memory': [[[1, 2], [3, 4]]],
+                        'write_weightings': [[1, 1]],
+                        'erase_vector': [[0.5, 1]],
+                        'write_vector': [[2, 4]],
+                        'expected': [[[2.5, 4], [3.5, 4]]],
+                    },
+                ]
+                for test in tests:
+                    mem = external_memory.ExternalMemory(
+                        memory_size=len(test['memory'][0]),
+                        word_size=len(test['memory'][0][0]))
+                    write_weightings = tf.constant(
+                        test['write_weightings'], dtype=tf.float32)
+                    erase_vector = tf.constant(
+                        test['erase_vector'], dtype=tf.float32)
+                    write_vector = tf.constant(
+                        test['write_vector'], dtype=tf.float32)
+                    memory = tf.constant(
+                        test['memory'], dtype=tf.float32)
+                    next_memory_op = mem.write(write_weightings, erase_vector,
+                                               write_vector, memory)
+                    got = sess.run(next_memory_op)
+                    assert_array_almost_equal(test['expected'], got)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -55,6 +55,9 @@ class ExternalMemory(snt.RNNCore):
     def _build(self,
                read_keys,
                read_strengths,
+               write_weightings,
+               erase_vector,
+               write_vector,
                prev_state):
         """Compute one timestep of computation for the External Memory.
 
@@ -62,12 +65,31 @@ class ExternalMemory(snt.RNNCore):
             read_keys: A Tensor of shape `[batch_size, num_reads, word_size]`
                 containing the read keys from the Read Head originally emitted
                 by the DNC controller. These are compared to each slot in the
-                external memory for content based addressing.
+                external memory for content based addressing. Represented as
+                `k_t^{r,i}` in the DNC paper for the read keys at time `t`
+                and read head `i`.
             read_strengths: A Tensor of shape `[batch_size, num_reads]`
                 containing the key strength at which the `c_t` vector should
                 be heightened in value. The values are bound to the interval
                 [1, inf). Represented in the DNC paper as `beta_t^{r,i}` for
                 time `t` with the ith read head.
+            write_weightings: A Tensor of shape `[batch_size, memory_size]`
+                containing the write weightings for external memory write
+                operation. If `write_weighting[,i]` is high, then that means
+                the ith slot in external memory should be written to the value
+                in `write_vector[i]` much more than if the value was low.
+                Represented as w_t^w in the DNC paper for write weightings
+                at time `t`.
+            erase_vector: A Tensor of shape `[batch_size, word_size]` with
+                the weights to erase from external memory. If
+                `erase_vector[,i]` is high then the ith word in each slot of
+                external memory will be erased more than if the value was
+                smaller. Represented as `e_t` in the DNC paper for the erase
+                vector at time `t`.
+            write_vector: A Tensor of shape `[batch_size, word_size]` with
+                the values to write in memory. This vector was directly
+                emitted from the DNC controller. Represented as `v_t` in the
+                DNC paper for the write vector at time `t`.
             prev_state: An instance of `ExternalMemoryState` containing the
                 previous state of this External Memory.
         Returns:
@@ -76,9 +98,15 @@ class ExternalMemory(snt.RNNCore):
             instance of `ExternalMemoryState` representing the next state of
             this External Memory after computation finishes.
         """
+        # content adressing weightings
         c_t = self.content_weights(
             read_keys, read_strengths, prev_state.memory)
-        return (c_t, prev_state)
+
+        # write to memory
+        memory = self.write(
+            write_weightings, erase_vector, write_vector, prev_state.memory)
+
+        return (c_t, ExternalMemoryState(memory=memory))
 
     def content_weights(self, read_keys, read_strengths, memory):
         """Calculate content based addressing weights, c_t.
@@ -129,6 +157,65 @@ class ExternalMemory(snt.RNNCore):
         # broadcasting to handle unequal Tensor shapes.
         return tf.nn.softmax(tf.multiply(content_similarity,
                                          tf.expand_dims(read_strengths, 2)))
+
+    def write(self, write_weightings, erase_vector, write_vector, memory):
+        """Write to external memory through en erase then add operation.
+
+        The write operation to external memory consists of two parts: erase
+        operation, add operation.
+
+        Let `M_t(i)` be the external memory matrix contents of slot `i` at time
+        `t`. Let `w_t(i)` be the write weightings vector at time `t` for the
+        slot `i` in external memory. Let `e_t` be the erase vector at time `t`.
+        Let `v_t` be the write vector at time `t` that is added to memory.
+
+        Erase Operation:
+            M_t'(i) = M_{t-1}(i) * (1 - w_t(i) * e_t)
+
+        Add Operation:
+            M_t(i) = M_t'(i) + w_t(i) * v_t
+
+        Args:
+            write_weightings: A Tensor of shape `[batch_size, memory_size]`
+                containing the write weightings for external memory write
+                operation. If `write_weighting[,i]` is high, then that means
+                the ith slot in external memory should be written to the value
+                in `write_vector[i]` much more than if the value was low.
+                Represented as w_t^w in the DNC paper for write weightings
+                at time `t`.
+            erase_vector: A Tensor of shape `[batch_size, word_size]` with
+                the weights to erase from external memory. If
+                `erase_vector[,i]` is high then the ith word in each slot of
+                external memory will be erased more than if the value was
+                smaller. Represented as `e_t` in the DNC paper for the erase
+                vector at time `t`.
+            write_vector: A Tensor of shape `[batch_size, word_size]` with
+                the values to write in memory. This vector was directly
+                emitted from the DNC controller. Represented as `v_t` in the
+                DNC paper for the write vector at time `t`.
+            memory: A Tensor of shape `[batch_size, memory_size, word_size]`
+                containing the data of the external memory.
+        Returns:
+            A Tensor of shape `[batch_size, memory_size, word_size]` containing
+            the contents of memory after writing for each batch.
+        """
+        # Tensor of shape `[batch_size, memory_size, 1]`
+        write_weightings_expanded = tf.expand_dims(write_weightings, 2)
+        # Tensor of shape `[batch_size, 1, word_size]`
+        erase_vector_expanded = tf.expand_dims(erase_vector, 1)
+        # Product is Tensor of shape `[batch_size, memory_size, word_size]`
+        weighted_erase_vector = tf.matmul(write_weightings_expanded,
+                                          erase_vector_expanded)
+        # Erase memory
+        erased_memory = tf.multiply(memory, 1 - weighted_erase_vector)
+        # Tensor of shape `[batch_size, 1, word_size]`
+        write_vector_expanded = tf.expand_dims(write_vector, 1)
+        # Product is Tensor of shape `[batch_size, memory_size, word_size]`
+        weighted_write_vector = tf.matmul(write_weightings_expanded,
+                                          write_vector_expanded)
+        # Write to memory
+        written_memory = tf.add(erased_memory, weighted_write_vector)
+        return written_memory
 
     @property
     def state_size(self):
