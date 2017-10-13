@@ -1,0 +1,48 @@
+\documentclass[12pt]{report}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{graphicx}
+\usepackage{indentfirst}
+\graphicspath{{resources/}}
+\usepackage[a4paper,width=150mm,top=25mm,bottom=25mm]{geometry}
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhead{}
+\fancyhead[RO,L]{Thesis Title}
+\fancyfoot{}
+\fancyfoot[L,RO]{\thepage}
+\fancyfoot[LO,C]{Chapter \thechapter}
+\fancyfoot[CO,R]{Author Name}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+% bibliography resources
+\usepackage{biblatex}
+\addbibresource{references.bib}
+
+\title{Thesis Title}
+\author{Austin Derrow-Pinion}
+\date{October 2017}
+
+\begin{document}
+
+\input{sections/titlepage}
+
+\chapter*{Abstract}
+\input{sections/abstract}
+
+\tableofcontents
+
+\chapter{Introduction}
+\input{sections/introduction}
+
+\chapter{Conclusion}
+\input{sections/conclusion}
+
+\appendix
+\chapter{Appendix Title}
+\input{sections/appendix}
+
+\printbibliography
+
+\end{document}
