@@ -54,7 +54,44 @@ class TemporalLinkage(snt.RNNCore):
             prev_state: An instance of `TemporalLinkageState` containing the
                 previous state of this Temporal Linkage.
         """
-        return prev_state
+        new_linkage = self.updated_temporal_linkage_matrix(
+            write_weightings, prev_state.precedence_weights,
+            prev_state.linkage_matrix)
+        new_precedence_weights = self.updated_precedence_weights(
+            write_weightings, prev_state.precedence_weights)
+        return TemporalLinkageState(linkage_matrix=new_linkage,
+                                    precedence_weights=new_precedence_weights)
+
+    def directional_weights(self, linkage, prev_read_weights):
+        """Compute the forward and backward weighting for the DNC read heads.
+
+        Given the temporal linkage matrix, `L_t`, and the previous timestep's
+        read weightings, `w_{t-1}^{r,i}`, forward and backward weightings can
+        be calculated as:
+            f_t^i = L_t * w_{t-1}^{r,i}
+            b_t^i = TRANSPOSE(L_t) * w_{t-1}^{r,i}
+
+        Args:
+            linkage: A Tensor of shape `[batch_size, memory_size, memory_size]`
+                containing the values in the temporal linkage matrix.
+                Represented in the DNC paper as `L_t` were `L_t[i, j]` is the
+                degree to which slot `i` in the external memory matrix was the
+                location written to after location `j`.
+            prev_read_weights: A Tensor of shape
+                `[batch_size, num_reads, memory_size]` containing the previous
+                read weights. This is written in the DNC paper as
+                `w_{t-1}^{r,i}` for time `t-1` for read head `i`.
+        Returns:
+            A tuple `(f_t^i, b_t^i)`. `f_t^i` is a Tensor of shape
+            `[batch_size, num_reads, memory_size]` containing the values for
+            forward weighting on every read head. `b_t^i` is a Tensor of shape
+            `[batch_size, num_reads, memory_size]` containing the values for
+            backward weighting on every read head.
+        """
+        f_t = tf.matmul(linkage, prev_read_weights, transpose_b=True)
+        b_t = tf.matmul(linkage, prev_read_weights, transpose_a=True,
+                                                    transpose_b=True)
+        return (tf.matrix_transpose(f_t), tf.matrix_transpose(b_t))
 
     def updated_temporal_linkage_matrix(self,
                                         write_weightings,
