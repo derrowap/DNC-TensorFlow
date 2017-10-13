@@ -14,7 +14,9 @@ import unittest
 from . testing import dnc_test, external_memory_test, tape_head_test, \
     temporal_linkage_test
 
+
 def suite():
+    """Create test suite for all tests in 'testing/' directory."""
     suite = unittest.TestSuite()
 
     # All test suites found in the 'testing/' directory.
