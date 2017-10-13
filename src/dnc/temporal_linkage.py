@@ -44,6 +44,10 @@ class TemporalLinkage(snt.RNNCore):
     def _build(self, write_weightings, prev_state):
         """Compute one timestep of computation for the Temporal Linkage.
 
+        Using the write weightings, `w_t^w`, this updates both the temporal
+        linkage matrix, `L_t`, and the precedence weights, `p_t` for the next
+        timestep.
+
         Args:
             write_weightings: A Tensor of shape `[batch_size, memory_size]`
                 containing the weights to write with. Represented as `w_t^w`
