@@ -37,7 +37,11 @@ class Usage(snt.RNNCore):
         self._state_size = UsageState(
             usage_vector=tf.TensorShape([self._memory_size]))
 
-    def _build(self, prev_write_weightings, prev_read_weightings, prev_state):
+    def _build(self,
+               prev_write_weightings,
+               prev_read_weightings,
+               free_gates,
+               prev_state):
         """Compute one timestep of computation for the Usage vector.
 
         Args:
@@ -51,10 +55,43 @@ class Usage(snt.RNNCore):
                 `[batch_size, num_reads, memory_size]` containing the previous
                 read weights. This is written in the DNC paper as
                 `w_{t-1}^{r,i}` for time `t-1` for read head `i`.
+            free_gates: A Tensor of shape `[batch_size, num_reads]` containing
+                a free gate value bounded in `[0, 1]` for each read head and
+                emitted from the controller. The DNC paper writes the free
+                gates as `f_t^i` for time `t` and read head `i`.
             prev_state: An instance of `TemporalLinkageState` containing the
                 previous state of this Temporal Linkage.
         """
         return prev_state
+
+    def memory_retention_vector(self, prev_read_weightings, free_gates):
+        """Compute the memory retention vector for this timestep.
+
+        The memory retention vector in the DNC paper is written as `psi_t` for
+        time `t`. The values represent how much each location in external
+        memory will not be freed by the free gates.
+
+        The memory retention vector is defined as:
+                psi_t = PRODUCT_{i=1}^R (1 - f_t^i * w_{t-1}^{r,i})
+
+        Args:
+            prev_read_weightings: A Tensor of shape
+                `[batch_size, num_reads, memory_size]` containing the previous
+                read weights. This is written in the DNC paper as
+                `w_{t-1}^{r,i}` for time `t-1` for read head `i`.
+            free_gates: A Tensor of shape `[batch_size, num_reads]` containing
+                a free gate value bounded in `[0, 1]` for each read head and
+                emitted from the controller. The DNC paper writes the free
+                gates as `f_t^i` for time `t` and read head `i`.
+        Returns:
+            A Tensor of shape `[batch_size, memory_size]` containing the values
+            of the memory retention vector for this timestep.
+        """
+        # Tensor of shape `[batch_size, num_reads, 1]`
+        free_gates_expanded = tf.expand_dims(free_gates, 2)
+        # Tensor of shape `[batch_size, num_reads, memory_size]
+        free_gates_weighted = free_gates_expanded * prev_read_weightings
+        return tf.reduce_prod(1 - free_gates_weighted, axis=1)
 
     @property
     def state_size(self):

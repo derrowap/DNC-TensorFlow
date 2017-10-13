@@ -1,8 +1,10 @@
 """Tests the Usage class implementation."""
 
+import tensorflow as tf
 import unittest
 
 from .. dnc import usage
+from numpy.testing import assert_array_almost_equal
 
 
 def suite():
@@ -19,6 +21,45 @@ class UsageTest(unittest.TestCase):
         """Test the construction of a Usage vector."""
         usage_vector = usage.Usage()
         self.assertIsInstance(usage_vector, usage.Usage)
+
+    def test_memory_retention_vector(self):
+        """Test the memory_retention_vector method."""
+        graph = tf.Graph()
+        with graph.as_default():
+            with tf.Session(graph=graph) as sess:
+                tests = [{  # no locations can be freed
+                    'w_r': [[[0, 0]]],
+                    'free_gates': [[0]],
+                    'expected': [[1, 1]],
+                }, {  # all locations can be freed
+                    'w_r': [[[1, 1]]],
+                    'free_gates': [[1]],
+                    'expected': [[0, 0]],
+                }, {  # partial memory retention
+                    'w_r': [[[0.5, 0.5]]],
+                    'free_gates': [[0.5]],
+                    'expected': [[0.75, 0.75]],
+                }, {  # num_reads > 1
+                    'w_r': [[[1, 0], [0.5, 0.5], [0, 0]]],
+                    'free_gates': [[1, 0.5, 0]],
+                    'expected': [[0, 0.75]],
+                }, {  # batch_size > 1
+                    'w_r': [[[1, 0]], [[0.5, 0.5]], [[0, 0]]],
+                    'free_gates': [[1], [0.5], [0]],
+                    'expected': [[0, 1], [0.75, 0.75], [1, 1]],
+                }, {  # batch_size > 1 and num_reads > 1
+                    'w_r': [[[1, 0], [0.5, 0.5]], [[0.5, 0.5], [0, 0]]],
+                    'free_gates': [[0.5, 0.2], [0.5, 0.8]],
+                    'expected': [[.45, .9], [.75, .75]],
+                }]
+                for test in tests:
+                    w_r = tf.constant(test['w_r'], dtype=tf.float32)
+                    f_t = tf.constant(test['free_gates'], dtype=tf.float32)
+                    expected = test['expected']
+                    usage_vector = usage.Usage(memory_size=len(expected[0]))
+                    got_op = usage_vector.memory_retention_vector(w_r, f_t)
+                    got = sess.run(got_op)
+                    assert_array_almost_equal(expected, got)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
