@@ -56,6 +56,52 @@ class TemporalLinkage(snt.RNNCore):
         """
         return prev_state
 
+    def updated_temporal_linkage_matrix(self,
+                                        write_weightings,
+                                        precedence_weights,
+                                        linkage):
+        """Compute the next timestep values for the temporal linkage matrix.
+
+        The temporal linkage matrix, represented in the DNC paper as `L_t`
+        is defined by the following recurrence relation:
+                L_0[i, j] = 0, for all i, j
+                L_t[i, i] = 0, for all i
+                L_t[i, j] = (1 - w_t^w[i] - w_t^w[j]) * L_{t - 1}[i, j]
+                                + w_t^w[i] * p_{t - 1}[j]
+
+        Args:
+            write_weightings: A Tensor of shape `[batch_size, memory_size]`
+                containing the weights to write with. Represented as `w_t^w`
+                in the DNC paper for time `t`. If `w_t^w[i]` is 0 then nothing
+                is written to memory regardless of the other parameters.
+                Therefore it can be used to protect the external memory from
+                unwanted modifications.
+            precedence_weights: A Tensor of shape `[batch_size, memory_size]`.
+                Represented in the DNC paper as `p_t` for time `t`. The value
+                `p_t[i]` represents the degree to which location `i` was the
+                last slot in external memory to be written to.
+            linkage: A Tensor of shape `[batch_size, memory_size, memory_size]`
+                containing the values in the temporal linkage matrix.
+                Represented in the DNC paper as `L_t` were `L_t[i, j]` is the
+                degree to which slot `i` in the external memory matrix was the
+                location written to after location `j`.
+        Returns:
+            A Tensor of shape `[batch_size, memory_size, memory_size]`
+            containing the next timestep values for the temporal linkage
+            matrix.
+        """
+        w_t_i = tf.expand_dims(write_weightings, 2)
+        w_t_j = tf.expand_dims(write_weightings, 1)
+        p_t_j = tf.expand_dims(precedence_weights, 1)
+        weight_differences = 1 - w_t_i - w_t_j
+        weighted_precedence = w_t_i * p_t_j
+        new_linkage = weight_differences * linkage + weighted_precedence
+        batch_size = linkage.get_shape()[0].value
+        updated_linkage = tf.matrix_set_diag(
+            new_linkage,
+            tf.zeros([batch_size, self._memory_size], dtype=linkage.dtype))
+        return updated_linkage
+
     def updated_precedence_weights(self, write_weightings, precedence_weights):
         """Compute the next timestep value for the precedence weights.
 

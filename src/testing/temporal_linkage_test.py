@@ -22,6 +22,73 @@ class TemporalLinkageTest(unittest.TestCase):
         linkage = temporal_linkage.TemporalLinkage()
         self.assertIsInstance(linkage, temporal_linkage.TemporalLinkage)
 
+    def test_updated_temporal_linkage_matrix(self):
+        """Test the updated_temporal_linkage_matrix method."""
+        graph = tf.Graph()
+        with graph.as_default():
+            with tf.Session(graph=graph) as sess:
+                tests = [
+                    {  # unchanged linkage
+                        'write_weightings': [[0, 0, 0]],
+                        'precedence': [[0, 0, 0]],
+                        'linkage': [[[0, 0, 0],
+                                     [0, 0, 0],
+                                     [0, 0, 0]]],
+                        'expected': [[[0, 0, 0],
+                                      [0, 0, 0],
+                                      [0, 0, 0]]],
+                    }, {  # nothing added when precedence all 0
+                        'write_weightings': [[0.5, 0.1]],
+                        'precedence': [[0, 0]],
+                        'linkage': [[[0, 0], [0, 0]]],
+                        'expected': [[[0, 0], [0, 0]]],
+                    }, {  # basic update with diagonal set to 0
+                        'write_weightings': [[0.5, 0.5]],
+                        'precedence': [[0.5, 0.5]],
+                        'linkage': [[[0, 0], [0, 0]]],
+                        'expected': [[[0, 0.25], [0.25, 0]]],
+                    }, {  # full write_weightings cause reset of L_t
+                        'write_weightings': [[0.5, 0.5]],
+                        'precedence': [[0.5, 0.5]],
+                        'linkage': [[[0, 0.8], [0.2, 0]]],
+                        'expected': [[[0, 0.25], [0.25, 0]]],
+                    }, {  # can write with data already in linkage
+                        'write_weightings': [[0.25, 0.25]],
+                        'precedence': [[0.25, 0.25]],
+                        'linkage': [[[0, 1], [1, 0]]],
+                        'expected': [[[0, .5625], [.5625, 0]]],
+                    }, {  # write_weightings of 0 result in no modifications
+                        'write_weightings': [[0, 0]],
+                        'precedence': [[0.5, 0.5]],
+                        'linkage': [[[0, 0.5], [0.8, 0]]],
+                        'expected': [[[0, 0.5], [0.8, 0]]],
+                    }, {  # batch_size > 1 handled independently
+                        'write_weightings': [[0.5, 0.1],
+                                             [0.5, 0.5],
+                                             [0.5, 0.5]],
+                        'precedence': [[0, 0], [0.5, 0.5], [0.5, 0.5]],
+                        'linkage': [[[0, 0], [0, 0]],
+                                    [[0, 0], [0, 0]],
+                                    [[0, 0.8], [0.2, 0]]],
+                        'expected': [[[0, 0], [0, 0]],
+                                     [[0, 0.25], [0.25, 0]],
+                                     [[0, 0.25], [0.25, 0]]],
+                    },
+                ]
+                for test in tests:
+                    w_t = tf.constant(
+                        test['write_weightings'], dtype=tf.float32)
+                    p_t = tf.constant(test['precedence'], dtype=tf.float32)
+                    prev_linkage = tf.constant(
+                        test['linkage'], dtype=tf.float32)
+                    expected = test['expected']
+                    linkage = temporal_linkage.TemporalLinkage(
+                        memory_size=len(expected[0]))
+                    got_op = linkage.updated_temporal_linkage_matrix(
+                        w_t, p_t, prev_linkage)
+                    got = sess.run(got_op)
+                    assert_array_almost_equal(expected, got)
+
     def test_updated_precedence_weights(self):
         """Test the updated_precedence_weights method in TemporalLinkage."""
         graph = tf.Graph()
