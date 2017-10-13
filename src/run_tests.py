@@ -12,7 +12,7 @@ TO ADD TESTS:
 import unittest
 
 from . testing import dnc_test, external_memory_test, tape_head_test, \
-    temporal_linkage_test
+    temporal_linkage_test, usage_test
 
 
 def suite():
@@ -25,6 +25,7 @@ def suite():
         external_memory_test.suite(),
         tape_head_test.suite(),
         temporal_linkage_test.suite(),
+        usage_test.suite(),
     ])
 
     return suite

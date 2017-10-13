@@ -94,7 +94,7 @@ class TemporalLinkage(snt.RNNCore):
         """
         f_t = tf.matmul(linkage, prev_read_weights, transpose_b=True)
         b_t = tf.matmul(linkage, prev_read_weights, transpose_a=True,
-                                                    transpose_b=True)
+                        transpose_b=True)
         return (tf.matrix_transpose(f_t), tf.matrix_transpose(b_t))
 
     def updated_temporal_linkage_matrix(self,
