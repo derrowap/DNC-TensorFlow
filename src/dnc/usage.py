@@ -44,6 +44,9 @@ class Usage(snt.RNNCore):
                prev_state):
         """Compute one timestep of computation for the Usage vector.
 
+        This updates the usage vector in the Usage state to the next timestep
+        iteration.
+
         Args:
             prev_write_weightings: A Tensor of shape
                 `[batch_size, memory_size]` containing the weights to write
@@ -62,7 +65,47 @@ class Usage(snt.RNNCore):
             prev_state: An instance of `TemporalLinkageState` containing the
                 previous state of this Temporal Linkage.
         """
-        return prev_state
+        memory_retention_vector = self.memory_retention_vector(
+            prev_read_weightings, free_gates)
+        updated_usage_vector = self.updated_usage_vector(
+            prev_state.usage_vector, prev_write_weightings,
+            memory_retention_vector)
+        return UsageState(usage_vector=updated_usage_vector)
+
+    def updated_usage_vector(self,
+                             prev_usage_vector,
+                             prev_write_weightings,
+                             memory_retention_vector):
+        """Compute the updated usage vector for this timestep.
+
+        The usage vector is written in the DNC paper as `u_t` for time `t`. It
+        can be defined as:
+            u_t = (u_{t-1} + w_{t-1}^w - u_{t-1} * w_{t-1}^w) * phi_t
+        where `w_{t-1^w` are the write weightings at the previous timestep and
+        `phi_t` is the memory retention vector for this timestep.
+
+        Args:
+            prev_usage_vector: A Tensor of shape `[batch_size, memory_size]`
+                containing the usage vector values from the previous timestep.
+                Written in the DNC paper as `u_{t-1}` for time `t-1`.
+            prev_write_weightings: A Tensor of shape
+                `[batch_size, memory_size]` containing the weights to write
+                with. Represented as `w_{t-1}^w` in the DNC paper for time'
+                `t-1`. If `w_{t-1}^w[i]` is 0 then nothing is written to memory
+                regardless of the other parameters. Therefore it can be used to
+                protect the external memory from unwanted modifications.
+            memory_retention_vector:  A Tensor of shape
+                `[batch_size, memory_size]` containing the values of the memory
+                retention vector for this timestep. Written in the DNC paper as
+                `phi_t` for time `t`.
+        Returns:
+            A Tensor of shape `[batch_size, memory_size]` containing the
+            updated usage vector values for this timestep.
+        """
+        return (prev_usage_vector +
+                prev_write_weightings -
+                prev_usage_vector *
+                prev_write_weightings) * memory_retention_vector
 
     def memory_retention_vector(self, prev_read_weightings, free_gates):
         """Compute the memory retention vector for this timestep.
