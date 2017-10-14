@@ -1,19 +1,22 @@
 """Tests the DNC class implementation."""
 
-import tensorflow as tf
-import numpy as np
 import unittest
 
-from .. dnc.dnc import DNC
+from .. dnc import dnc
+
 
 def suite():
+    """Create testing suite for all tests in this module."""
     suite = unittest.TestSuite()
     suite.addTest(DNCTest('test_construction'))
     return suite
 
+
 class DNCTest(unittest.TestCase):
-    
+    """Tests for the DNC class."""
+
     def test_construction(self):
+        """Test the construction of a DNC vector."""
         controller_config = {
             "hidden_size": 64,
         }
@@ -24,12 +27,8 @@ class DNCTest(unittest.TestCase):
             "num_writes": 1,
         }
         output_size = 10
-        graph = tf.Graph()
-        with graph.as_default():
-            with tf.Session(graph=graph) as session:
-                dnc = DNC(controller_config, memory_config, output_size)
-                
-                self.assertTrue(isinstance(dnc, DNC))
-                
+        d = dnc.DNC(controller_config, memory_config, output_size)
+        self.assertIsInstance(d, dnc.DNC)
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

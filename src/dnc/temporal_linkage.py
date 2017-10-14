@@ -85,6 +85,7 @@ class TemporalLinkage(snt.RNNCore):
                 `[batch_size, num_reads, memory_size]` containing the previous
                 read weights. This is written in the DNC paper as
                 `w_{t-1}^{r,i}` for time `t-1` for read head `i`.
+
         Returns:
             A tuple `(f_t^i, b_t^i)`. `f_t^i` is a Tensor of shape
             `[batch_size, num_reads, memory_size]` containing the values for
@@ -126,6 +127,7 @@ class TemporalLinkage(snt.RNNCore):
                 Represented in the DNC paper as `L_t` were `L_t[i, j]` is the
                 degree to which slot `i` in the external memory matrix was the
                 location written to after location `j`.
+
         Returns:
             A Tensor of shape `[batch_size, memory_size, memory_size]`
             containing the next timestep values for the temporal linkage
@@ -162,6 +164,7 @@ class TemporalLinkage(snt.RNNCore):
                 Represented in the DNC paper as `p_t` for time `t`. The value
                 `p_t[i]` represents the degree to which location `i` was the
                 last slot in external memory to be written to.
+
         Returns:
             A Tensor of shape `[batch_size, memory_size]` containing the next
             timestep values for the precedence weights as defined by the

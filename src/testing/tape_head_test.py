@@ -1,23 +1,24 @@
 """Tests the TapeHead class implementation."""
 
-import tensorflow as tf
 import unittest
 
-from .. dnc.tape_head import TapeHead
+from .. dnc import tape_head
+
 
 def suite():
+    """Create testing suite for all tests in this module."""
     suite = unittest.TestSuite()
     suite.addTest(unittest.makeSuite(TapeHeadTest))
     return suite
 
+
 class TapeHeadTest(unittest.TestCase):
-    
+    """Tests for the TapeHead class."""
+
     def test_construction(self):
-        graph = tf.Graph()
-        with graph.as_default():
-            with tf.Session(graph=graph) as session:
-                tape_head = TapeHead()
-                self.assertTrue(isinstance(tape_head, TapeHead))
-                
+        """Test the construction of a TapeHead vector."""
+        tape = tape_head.TapeHead()
+        self.assertIsInstance(tape, tape_head.TapeHead)
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -92,6 +92,7 @@ class ExternalMemory(snt.RNNCore):
                 DNC paper for the write vector at time `t`.
             prev_state: An instance of `ExternalMemoryState` containing the
                 previous state of this External Memory.
+
         Returns:
             A tuple `(output, next_state)`. Where `output` is a Tensor of the
             content based addressing weightings. The `next_state` is an
@@ -133,6 +134,7 @@ class ExternalMemory(snt.RNNCore):
                 time `t` with the ith read head.
             memory: A Tensor of shape `[batch_size, memory_size, word_size]`
                 containing the data of the external memory.
+
         Returns:
             A Tensor of shape `[batch_size, num_reads, memory_size]` with the
             content weights for each of the num_reads many read heads.
@@ -195,6 +197,7 @@ class ExternalMemory(snt.RNNCore):
                 DNC paper for the write vector at time `t`.
             memory: A Tensor of shape `[batch_size, memory_size, word_size]`
                 containing the data of the external memory.
+
         Returns:
             A Tensor of shape `[batch_size, memory_size, word_size]` containing
             the contents of memory after writing for each batch.

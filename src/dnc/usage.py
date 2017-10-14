@@ -98,6 +98,7 @@ class Usage(snt.RNNCore):
                 `[batch_size, memory_size]` containing the values of the memory
                 retention vector for this timestep. Written in the DNC paper as
                 `phi_t` for time `t`.
+
         Returns:
             A Tensor of shape `[batch_size, memory_size]` containing the
             updated usage vector values for this timestep.
@@ -126,6 +127,7 @@ class Usage(snt.RNNCore):
                 a free gate value bounded in `[0, 1]` for each read head and
                 emitted from the controller. The DNC paper writes the free
                 gates as `f_t^i` for time `t` and read head `i`.
+
         Returns:
             A Tensor of shape `[batch_size, memory_size]` containing the values
             of the memory retention vector for this timestep.
