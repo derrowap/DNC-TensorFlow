@@ -138,6 +138,32 @@ class Usage(snt.RNNCore):
         free_gates_weighted = free_gates_expanded * prev_read_weightings
         return tf.reduce_prod(1 - free_gates_weighted, axis=1)
 
+    def sorted_indices(self, usage_vector):
+        """Construct a list of sorted indices from the usage vector.
+
+        The sort is in ascending order. Sorting is a non-differentiable
+        function so these discontinuities must be ignored in the DNC function
+        to calculate training gradients. The DNC paper seems to claim this
+        is not relevant to learning and won't effect the outcome.
+
+        The paper writes this sorted free list as `phi_t` for time `t`. Since
+        it is in ascending order, `phi_t[1]` is the index of the least used
+        location in the DNC external memory at time `t`.
+
+        Args:
+            usage_vector: A Tensor of shape `[batch_size, memory_size]`
+                containing the usage vector values from this timestep. Written
+                in the DNC paper as `u_t` for time `t`.
+
+        Returns:
+            A Tensor of shape `[batch_size, memory_size]` containing the
+            indices for the sorted usage vector for every batch in ascending
+            order.
+        """
+        values, descending_indices = tf.nn.top_k(usage_vector,
+                                                 k=self._memory_size)
+        return tf.reverse(descending_indices, [-1])
+
     @property
     def state_size(self):
         """Return a description of the state size."""

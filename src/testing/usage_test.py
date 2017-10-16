@@ -4,7 +4,7 @@ import tensorflow as tf
 import unittest
 
 from .. dnc import usage
-from numpy.testing import assert_array_almost_equal
+from numpy.testing import assert_array_almost_equal, assert_array_equal
 
 
 def suite():
@@ -105,6 +105,28 @@ class UsageTest(unittest.TestCase):
                     got_op = usage_vector.memory_retention_vector(w_r, f_t)
                     got = sess.run(got_op)
                     assert_array_almost_equal(expected, got)
+
+    def test_sorted_indices(self):
+        """Test the sorted_indices method."""
+        graph = tf.Graph()
+        with graph.as_default():
+            with tf.Session(graph=graph) as sess:
+                tests = [{  # basic case
+                    'usage': [[1, 2, 3]],
+                    'expected': [[0, 1, 2]],
+                }, {  # batch_size > 1
+                    'usage': [[3, 6, 5, 1], [2, 9, 7, 3]],
+                    'expected': [[3, 0, 2, 1], [0, 3, 2, 1]],
+                }, {  # size of 1
+                    'usage': [[1], [2], [3]],
+                    'expected': [[0], [0], [0]],
+                }]
+                for test in tests:
+                    usage_vector = tf.constant(test['usage'], dtype=tf.float32)
+                    expected = test['expected']
+                    u = usage.Usage(memory_size=len(expected[0]))
+                    got = sess.run(u.sorted_indices(usage_vector))
+                    assert_array_equal(expected, got)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
