@@ -106,6 +106,40 @@ class UsageTest(unittest.TestCase):
                     got = sess.run(got_op)
                     assert_array_almost_equal(expected, got)
 
+    def test_allocation_weighting(self):
+        """Test the allocation_weighting method."""
+        graph = tf.Graph()
+        with graph.as_default():
+            with tf.Session(graph=graph) as sess:
+                tests = [{  # basic case
+                    'usage': [[0.1, 0.2, 0.7]],
+                    'expected': [[.9, .08, .006]],
+                }, {  # all usages are 1
+                    'usage': [[1, 1, 1, 1]],
+                    'expected': [[0, 0, 0, 0]],
+                }, {  # All 0 usage results in just the last one being 1.
+                      # This is potentially a problem to look into later.
+                    'usage': [[0, 0, 0, 0]],
+                    'expected': [[0, 0, 0, 1]],
+                }, {  # Batch_size > 1 works as independently.
+                      # Notice [0.5, 0.5] should have equal allocation weights
+                      # intuitively, but results in unequal [0.25, 0.5]. This
+                      # is a result of the cumulative product being external
+                      # in the equation for the allocation weighting. This is
+                      # potentially a problem to look into later.
+                    'usage': [[0.5, 0.5], [0.2, 0.3]],
+                    'expected': [[0.25, 0.5], [0.8, 0.14]],
+                }, {  # 1 length vectors just result in being (1 - v)
+                    'usage': [[0.5], [1], [0], [0.2]],
+                    'expected': [[0.5], [0], [1], [0.8]],
+                }]
+                for test in tests:
+                    usage_vector = tf.constant(test['usage'], dtype=tf.float32)
+                    expected = test['expected']
+                    u = usage.Usage(memory_size=len(expected[0]))
+                    got = sess.run(u.allocation_weighting(usage_vector))
+                    assert_array_almost_equal(expected, got)
+
     def test_sorted_indices(self):
         """Test the sorted_indices method."""
         graph = tf.Graph()
@@ -125,7 +159,7 @@ class UsageTest(unittest.TestCase):
                     usage_vector = tf.constant(test['usage'], dtype=tf.float32)
                     expected = test['expected']
                     u = usage.Usage(memory_size=len(expected[0]))
-                    got = sess.run(u.sorted_indices(usage_vector))
+                    _, got = sess.run(u.sorted_indices(usage_vector))
                     assert_array_equal(expected, got)
 
 if __name__ == '__main__':

@@ -64,13 +64,21 @@ class Usage(snt.RNNCore):
                 gates as `f_t^i` for time `t` and read head `i`.
             prev_state: An instance of `TemporalLinkageState` containing the
                 previous state of this Temporal Linkage.
+
+        Returns:
+            A tuple `(output, next_state)`. Where `output` is a Tensor of shape
+            `[batch_size, memory_size]` containing allocation weighting vector
+            for each batch. The `next_state` is an instance of `UsageState`
+            containing this timestep's updated usage vector.
         """
         memory_retention_vector = self.memory_retention_vector(
             prev_read_weightings, free_gates)
         updated_usage_vector = self.updated_usage_vector(
             prev_state.usage_vector, prev_write_weightings,
             memory_retention_vector)
-        return UsageState(usage_vector=updated_usage_vector)
+        allocation_weighting = self.allocation_weighting(updated_usage_vector)
+        return (allocation_weighting,
+                UsageState(usage_vector=updated_usage_vector))
 
     def updated_usage_vector(self,
                              prev_usage_vector,
@@ -138,6 +146,45 @@ class Usage(snt.RNNCore):
         free_gates_weighted = free_gates_expanded * prev_read_weightings
         return tf.reduce_prod(1 - free_gates_weighted, axis=1)
 
+    def allocation_weighting(self, usage_vector):
+        """Compute the allocation weighting vector providing write locations.
+
+        The allocation weighting vector is written in the DNC paper as `a_t`
+        for time `t`. Since the vector is a weighting, the values sum to less
+        than or equal to 1. If all usages are 1, that means each location in
+        memory is very important and so the allocation weighting will be 0
+        meaning no new information can be written to the external memory.
+
+        Let `phi_t` be the sorted indices vector for the usage vector. The
+        allocation weighting vector is computed as:
+            a_t[phi_t[j]] = (1 - u_t[phi_t[j]])
+                                * MULTIPLY_{i=1}^{j-1}(u_t[phi_t[i]])
+
+        Args:
+            usage_vector: A Tensor of shape `[batch_size, memory_size]`
+                containing the usage vector values from this timestep. Written
+                in the DNC paper as `u_t` for time `t`.
+
+        Returns:
+            A Tensor of shape `[batch_size, memory_size]` containing the values
+            for the allocation vector for each batch of input.
+        """
+        sorted_usage, indices = self.sorted_indices(usage_vector)
+        non_usage = 1 - sorted_usage
+        usage_cumprod = tf.cumprod(sorted_usage, axis=1, exclusive=True)
+        sorted_allocation = tf.expand_dims(non_usage * usage_cumprod, 2)
+
+        # reorder sorted_allocation back to original order in usage_vector
+        flattened_allocation = tf.reshape(sorted_allocation, [-1])
+        batch_size = tf.shape(usage_vector)[0]
+        index_offset = tf.tile(
+            tf.expand_dims(self._memory_size * tf.range(0, batch_size), 1),
+            [1, self._memory_size])
+        flattened_index_offset = tf.reshape(index_offset, [-1])
+        flattened_indices = tf.reshape(indices, [-1]) + flattened_index_offset
+        ordered_allocation = tf.gather(flattened_allocation, flattened_indices)
+        return tf.reshape(ordered_allocation, [-1, self._memory_size])
+
     def sorted_indices(self, usage_vector):
         """Construct a list of sorted indices from the usage vector.
 
@@ -156,13 +203,14 @@ class Usage(snt.RNNCore):
                 in the DNC paper as `u_t` for time `t`.
 
         Returns:
-            A Tensor of shape `[batch_size, memory_size]` containing the
-            indices for the sorted usage vector for every batch in ascending
-            order.
+            A tuple `(values, indices)` where both are a Tensor of shape
+            `[batch_size, memory_size]`. The `values` contain the usage vector
+            values sorted in ascending order. The `indices` contain the indices
+            for the sorted usage vector for every batch in ascending order.
         """
         values, descending_indices = tf.nn.top_k(usage_vector,
                                                  k=self._memory_size)
-        return tf.reverse(descending_indices, [-1])
+        return (tf.reverse(values, [-1]), tf.reverse(descending_indices, [-1]))
 
     @property
     def state_size(self):
