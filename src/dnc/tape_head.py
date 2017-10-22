@@ -8,6 +8,7 @@ Author: Austin Derrow-Pinion
 """
 
 import collections
+import numpy as np
 import sonnet as snt
 import tensorflow as tf
 
@@ -72,7 +73,6 @@ class TapeHead(snt.RNNCore):
     def __init__(self,
                  memory_size=16,
                  word_size=16,
-                 read_mode=[0., 1., 0.],
                  num_read_heads=1,
                  name='tape_head'):
         """Initialize a Tape Head used in a DNC.
@@ -82,11 +82,6 @@ class TapeHead(snt.RNNCore):
                 Default value is 16.
             word_size: The width of each memory slot (W in the DNC paper).
                 Default value is 16.
-            read_mode: A softmax vector of length 3 such that the 3 values
-                sum to 1. Each index represents the strength of using the
-                respective read mode. Index 0 is for backwards, index 1 is
-                for content based addressing, and index 2 is for backwards
-                (pi_t in the DNC paper). Default value is [0, 1, 0].
             num_read_heads: The number of read heads is unbounded in the DNC,
                 but the number of write heads was changed from unbounded in the
                 Neural Turing Machine to only 1 in the DNC. Default value is 1.
@@ -96,7 +91,6 @@ class TapeHead(snt.RNNCore):
 
         self._memory_size = memory_size
         self._word_size = word_size
-        self._read_mode = read_mode
         self._num_read_heads = num_read_heads
 
         # TODO(derrowap): when linkage and usage are implemented, use their
@@ -126,6 +120,85 @@ class TapeHead(snt.RNNCore):
             finishes.
         """
         return prev_state
+
+    def interface_parameters(self, interface_vector):
+        """Extract the interface parameters from the interface vector.
+
+        The interface vector is written as `xi_t` in the DNC paper for time
+        `t`. Below is the equation of what the interface vector contains:
+            xi_t = [
+                k_t^{r,1}; ...; k_t^{r,R};          (R read keys)
+                beta_t^{r,1}; ...; beta_t^{r,R};    (R read strenghts)
+                k_t^w;                              (the write key)
+                beta_t^w;                           (the write strength)
+                e_t;                                (the erase vector)
+                v_t;                                (the write vector)
+                f_t^1; ...; f_t^R;                  (R free gates)
+                g_t^a;                              (the allocation gate)
+                g_t^w;                              (the write gate)
+                pi_t^1; ...; pi_t^R                 (R read modes)
+            ]
+
+        The read and write strengths are processed with the `oneplus` function
+        to restrict the values in the domain `[1, infinity)`:
+            oneplus(x) = 1 + log(1 + exp(x))
+
+        The erase vector, free gates, allocation gate, and write gate, are
+        processed with the logistic sigmoid function to constrain the values to
+        the domain `[0, 1]`.
+
+        The read modes are processed with the softmax function so that for any
+        read mode, `pi_t^i`, the values are bound to the domain `[0, 1]` and
+        the sum of the elements in the vector is equal to 1.
+
+        Args:
+            interface_vector: A Tensor of shape `[batch_size, num_read_heads *
+                word_size + 3 * word_size + 5 * num_read_heads + 3]` containing
+                the individual components emitted by the DNC controller. This
+                is written in the DNC paper as `xi_t` for time `t`.
+
+        Returns:
+            A tuple `(read_keys, read_strengths, write_key, write_strengths,
+            erase_vector, write_vector, free_gates, allocation_gate,
+            write_gate, read_modes)` as explained in the description of this
+            method.
+        """
+        def _get(shape, offset):
+            size = np.prod(shape)
+            output = interface_vector[:, offset:offset + size]
+            return tf.reshape(output, shape=[-1] + shape), offset + size
+
+        def _oneplus(x):
+            return 1 + tf.log(1 + tf.exp(x))
+
+        offset = 0
+        read_keys, offset = _get([self._num_read_heads, self._memory_size],
+                                 offset)
+        _read_strengths, offset = _get([self._num_read_heads], offset)
+        write_key, offset = _get([self._word_size], offset)
+        _write_strengths, offset = _get([1], offset)
+        _erase_vector, offset = _get([self._word_size], offset)
+        write_vector, offset = _get([self._word_size], offset)
+        _free_gates, offset = _get([self._num_read_heads], offset)
+        _allocation_gate, offset = _get([1], offset)
+        _write_gate, offset = _get([1], offset)
+        _read_modes, offset = _get([self._num_read_heads, 3], offset)
+
+        read_strengths = _oneplus(_read_strengths)
+        write_strengths = _oneplus(_write_strengths)
+
+        erase_vector = tf.sigmoid(_erase_vector)
+        free_gates = tf.sigmoid(_free_gates)
+        allocation_gate = tf.sigmoid(_allocation_gate)
+        write_gate = tf.sigmoid(_write_gate)
+
+        read_modes = tf.nn.softmax(_read_modes)
+
+        return (
+            read_keys, read_strengths, write_key, write_strengths,
+            erase_vector, write_vector, free_gates, allocation_gate,
+            write_gate, read_modes
+        )
 
     @property
     def state_size(self):
