@@ -171,17 +171,40 @@ class TapeHead(snt.RNNCore):
                         write_content_weighting):
         """Compute the write weighting vector.
 
+        The write weighting vector, `w_t^w` is defined as:
+                w_t^w = g_t^w * [g_t^a * a_t + (1 - g_t^a) * c_t^w]
+
+        Where `g_t^w` is the write gate, `g_t^a` is the allocation gate, `a_t`
+        is the allocation weighting, and `c_t^w` is the write content
+        weighting.
+
         Args:
-            write_gate:
-            allocation_gate:
-            allocation_weighting:
-            write_content_weighting:
+            write_gate: A Tensor of shape `[batch_size, 1]` containing the
+                write gate values from the interface parameters. Written as
+                `g_t^w` in the DNC paper.
+            allocation_gate: A Tensor of shape `[batch_size, 1]` containing the
+                allocation gate values from the interface parameters. Written
+                as `g_t^a` in the DNC paper.
+            allocation_weighting: A Tensor of shape `[batch_size, memory_size]`
+                containing the allocation weighting values from the Usage
+                class. Written as `a_t` in the DNC paper.
+            write_content_weighting: A Tensor of shape
+                `[batch_size, memory_size]` containing the write content
+                weighting values. Written as `c_t^w` in the DNC paper.
 
         Returns:
-            A Tensor of shape `[batch_size, ]`.
+            A Tensor of shape `[batch_size, memory_size]` containing the write
+            weighting values. Written as `w_t^w` in the DNC paper.
         """
-        # TODO
-        return None
+        # [batch_size, 1]
+        output = 1 - allocation_gate
+        # [batch_size, memory_size]
+        output = output * write_content_weighting
+        # [batch_size, memory_size]
+        output = output + allocation_gate * allocation_weighting
+        # [batch_size, memory_size]
+        output = output * write_gate
+        return output
 
     def read_weights(self,
                      read_modes,

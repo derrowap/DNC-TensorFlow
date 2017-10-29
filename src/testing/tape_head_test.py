@@ -23,6 +23,53 @@ class TapeHeadTest(unittest.TestCase):
         tape = tape_head.TapeHead()
         self.assertIsInstance(tape, tape_head.TapeHead)
 
+    def test_write_weighting(self):
+        """Test the write_weighting method."""
+        graph = tf.Graph()
+        with graph.as_default():
+            with tf.Session(graph=graph) as sess:
+                tests = [{  # only allocation weighting
+                    'write_gate': [[1]],
+                    'allocation_gate': [[1]],
+                    'allocation_weighting': [[0.5, 0.5]],
+                    'write_content_weighting': [[0.5, 0.5]],
+                    'expected': [[0.5, 0.5]],
+                }, {  # allocation gate makes half of allocation_weighting and
+                      # half of write_content_weighting
+                    'write_gate': [[1]],
+                    'allocation_gate': [[0.5]],
+                    'allocation_weighting': [[0.2, 0.2]],
+                    'write_content_weighting': [[0.5, 0.5]],
+                    'expected': [[0.35, 0.35]],
+                }, {  # write_gate halves the output
+                    'write_gate': [[0.5]],
+                    'allocation_gate': [[1]],
+                    'allocation_weighting': [[0.5, 0.5]],
+                    'write_content_weighting': [[0.5, 0.5]],
+                    'expected': [[0.25, 0.25]],
+                }, {  # batch_size > 1
+                    'write_gate': [[0.5], [0.2]],
+                    'allocation_gate': [[0.2], [0.5]],
+                    'allocation_weighting': [[0.5, 0.5], [0.2, 0.8]],
+                    'write_content_weighting': [[0.8, 0.2], [0.5, 0.5]],
+                    'expected': [[0.37, 0.13], [0.07, 0.13]],
+                }]
+                for test in tests:
+                    write_gate = tf.constant(test['write_gate'],
+                                             dtype=tf.float32)
+                    allocation_gate = tf.constant(test['allocation_gate'],
+                                                  dtype=tf.float32)
+                    allocation_weighting = tf.constant(
+                        test['allocation_weighting'], dtype=tf.float32)
+                    write_content_weighting = tf.constant(
+                        test['write_content_weighting'], dtype=tf.float32)
+                    expected = test['expected']
+                    tape = tape_head.TapeHead(memory_size=len(expected[0]))
+                    got = sess.run(tape.write_weighting(
+                        write_gate, allocation_gate, allocation_weighting,
+                        write_content_weighting))
+                    assert_array_almost_equal(expected, got)
+
     def test_read_weights(self):
         """Test the read_weights method."""
         graph = tf.Graph()
