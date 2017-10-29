@@ -12,6 +12,10 @@ import numpy as np
 import sonnet as snt
 import tensorflow as tf
 
+from .. dnc.external_memory import ExternalMemory
+from .. dnc.temporal_linkage import TemporalLinkage
+from .. dnc.usage import Usage
+
 TapeHeadState = collections.namedtuple('TapeHeadState', (
     'memory', 'read_weights', 'write_weights', 'linkage', 'usage'))
 
@@ -106,20 +110,119 @@ class TapeHead(snt.RNNCore):
         """Compute one timestep of computation for the Tape Head.
 
         Args:
-            inputs: A Tensor of shape [batch_size, input_size] emitted from
-                the DNC controller. This holds data that controls what this
-                read head does.
+            inputs: A Tensor of shape `[batch_size, num_read_heads *
+                word_size + 3 * word_size + 5 * num_read_heads + 3]` emitted
+                from the DNC controller. This holds data that controls what
+                this read head does.
             prev_state: An instance of 'TapeHeadState' containing the
                 previous state of this Tape Head.
 
         Returns:
             A tuple `(output, next_state)`. Where `output` is a Tensor of
             shape `[batch_size, word_size]` representing the read vector
-            result, r_t. The `next_state` is an instance of 'TapeHeadState'
+            result, `r_t`. The `next_state` is an instance of `TapeHeadState`
             representing the next state of this Tape Head after computation
             finishes.
         """
-        return prev_state
+        (
+            read_keys, read_strengths, write_key, write_strengths,
+            erase_vector, write_vector, free_gates, allocation_gate,
+            write_gate, read_modes
+        ) = self.interface_parameters(inputs)
+        external_memory = ExternalMemory(memory_size=self._memory_size,
+                                         word_size=self._word_size)
+        usage = Usage(memory_size=self._memory_size)
+        temporal_linkage = TemporalLinkage(memory_size=self._memory_size)
+
+        allocation_weighting = usage(prev_state.write_weights,
+                                     prev_state.read_weights,
+                                     free_gates,
+                                     prev_state.usage)
+        write_content_weighting = external_memory.content_weights(
+            read_keys, read_strengths, prev_state.memory.memory)
+        write_weighting = self.write_weighting(write_gate,
+                                               allocation_gate,
+                                               allocation_weighting,
+                                               write_content_weighting)
+        content_weighting, memory_next_state = external_memory(
+            read_keys,
+            read_strengths,
+            write_weighting,
+            erase_vector,
+            write_vector,
+            prev_state.memory)
+
+        linkage = temporal_linkage(write_weighting, prev_state.linkage)
+
+        (forward_weighting,
+         backward_weighting) = temporal_linkage.directional_weights(
+            linkage.linkage_matrix, prev_state.read_weights)
+
+        read_weights = self.read_weights(read_modes, backward_weighting,
+                                         content_weighting, forward_weighting)
+        read_vectors = tf.matmul(memory_next_state.memory, read_weights,
+                                 transpose_a=True)
+        return (read_vectors, prev_state)
+
+    def write_weighting(self,
+                        write_gate,
+                        allocation_gate,
+                        allocation_weighting,
+                        write_content_weighting):
+        """Compute the write weighting vector.
+
+        Args:
+            write_gate:
+            allocation_gate:
+            allocation_weighting:
+            write_content_weighting:
+
+        Returns:
+            A Tensor of shape `[batch_size, ]`.
+        """
+        # TODO
+        return None
+
+    def read_weights(self,
+                     read_modes,
+                     backward_weighting,
+                     content_weighting,
+                     forward_weighting):
+        """Compute the read weighting vector.
+
+        The read weighting vector is written in the DNC paper as `w_t^{r,i}`
+        for time `t` and read head `i`. This can be calculated by:
+            w_t^{r,i} = pi_t^i[0] * b_t^i
+                        + pi_t^i[1] * c_t^{r,i}
+                        + pi_t^i[2] * f_t^{r,i}
+
+        Args:
+            read_modes: A Tensor of shape `[batch_size, num_read_heads, 3]`
+                containing the read modes emitted by the DNC controller.
+            backward_weighting: A Tensor of shape
+                `[batch_size, num_read_heads, memory_size]` containing the
+                values for the backward weighting.
+            content_weighting: A Tensor of shape
+                `[batch_size, num_read_heads, memory_size]` containing the
+                values for the content weighting.
+            forward_weighting: A Tensor of shape
+                `[batch_size, num_read_heads, memory_size]` containing the
+                values for the forward weighting.
+
+        Returns:
+            A Tensor of shape `[batch_size, num_read_heads, memory_size]`.
+        """
+        # [[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
+        #  [[0.7, 0.8, 0.9], [0.8, 0.7, 0.6]]]
+        backward_mode = tf.slice(read_modes, [0, 0, 0], [-1, -1, 1])
+        content_mode = tf.slice(read_modes, [0, 0, 1], [-1, -1, 1])
+        forward_mode = tf.slice(read_modes, [0, 0, 2], [-1, -1, 1])
+        #   [batch_size, num_read_heads, 1]
+        # * [batch_size, num_read_heads, memory_size]
+        # = [batch_size, num_read_heads, memory_size]
+        return tf.multiply(backward_mode, backward_weighting) + \
+            tf.multiply(content_mode, content_weighting) + \
+            tf.multiply(forward_mode, forward_weighting)
 
     def interface_parameters(self, interface_vector):
         """Extract the interface parameters from the interface vector.

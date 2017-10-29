@@ -23,6 +23,76 @@ class TapeHeadTest(unittest.TestCase):
         tape = tape_head.TapeHead()
         self.assertIsInstance(tape, tape_head.TapeHead)
 
+    def test_read_weights(self):
+        """Test the read_weights method."""
+        graph = tf.Graph()
+        with graph.as_default():
+            with tf.Session(graph=graph) as sess:
+                tests = [{  # only backward values
+                    'read_modes': [[[1, 0, 0]]],
+                    'backward': [[[0.1, 0.2]]],
+                    'content': [[[0.3, 0.4]]],
+                    'forward': [[[0.5, 0.6]]],
+                    'expected': [[[0.1, 0.2]]],
+                }, {  # only content values
+                    'read_modes': [[[0, 1, 0]]],
+                    'backward': [[[0.1, 0.2]]],
+                    'content': [[[0.3, 0.4]]],
+                    'forward': [[[0.5, 0.6]]],
+                    'expected': [[[0.3, 0.4]]],
+                }, {  # only forward values
+                    'read_modes': [[[0, 0, 1]]],
+                    'backward': [[[0.1, 0.2]]],
+                    'content': [[[0.3, 0.4]]],
+                    'forward': [[[0.5, 0.6]]],
+                    'expected': [[[0.5, 0.6]]],
+                }, {  # mix of all 3 read modes
+                    'read_modes': [[[0.2, 0.5, 0.3]]],
+                    'backward': [[[0.1, 0.2]]],
+                    'content': [[[0.3, 0.4]]],
+                    'forward': [[[0.5, 0.6]]],
+                    'expected': [[[0.32, 0.42]]],
+                }, {  # num_read_heads > 1
+                    'read_modes': [[[1, 0, 0], [0, 1, 0], [0, 0, 1]]],
+                    'backward': [[[0.1, 0.2], [0.1, 0.2], [0.1, 0.2]]],
+                    'content': [[[0.3, 0.4], [0.3, 0.4], [0.3, 0.4]]],
+                    'forward': [[[0.5, 0.6], [0.5, 0.6], [0.5, 0.6]]],
+                    'expected': [[[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]]],
+                }, {  # batch_size > 1
+                    'read_modes': [[[1, 0, 0]], [[0, 1, 0]], [[0, 0, 1]]],
+                    'backward': [[[0.1, 0.2]], [[0.1, 0.2]], [[0.1, 0.2]]],
+                    'content': [[[0.3, 0.4]], [[0.3, 0.4]], [[0.3, 0.4]]],
+                    'forward': [[[0.5, 0.6]], [[0.5, 0.6]], [[0.5, 0.6]]],
+                    'expected': [[[0.1, 0.2]], [[0.3, 0.4]], [[0.5, 0.6]]],
+                }, {  # batch_size > 1 and num_read_heads > 1
+                    'read_modes': [[[1, 0, 0], [1, 0, 0]],
+                                   [[0, 1, 0], [0, 1, 0]],
+                                   [[0, 0, 1], [0, 0, 1]]],
+                    'backward': [[[0.1, 0.2], [0.1, 0.2]],
+                                 [[0.1, 0.2], [0.1, 0.2]],
+                                 [[0.1, 0.2], [0.1, 0.2]]],
+                    'content': [[[0.3, 0.4], [0.3, 0.4]],
+                                [[0.3, 0.4], [0.3, 0.4]],
+                                [[0.3, 0.4], [0.3, 0.4]]],
+                    'forward': [[[0.5, 0.6], [0.5, 0.6]],
+                                [[0.5, 0.6], [0.5, 0.6]],
+                                [[0.5, 0.6], [0.5, 0.6]]],
+                    'expected': [[[0.1, 0.2], [0.1, 0.2]],
+                                 [[0.3, 0.4], [0.3, 0.4]],
+                                 [[0.5, 0.6], [0.5, 0.6]]],
+                }]
+                for test in tests:
+                    read_modes = tf.constant(test['read_modes'],
+                                             dtype=tf.float32)
+                    b = tf.constant(test['backward'], dtype=tf.float32)
+                    c = tf.constant(test['content'], dtype=tf.float32)
+                    f = tf.constant(test['forward'], dtype=tf.float32)
+                    expected = test['expected']
+                    tape = tape_head.TapeHead(memory_size=len(expected[0][0]),
+                                              num_read_heads=len(expected[0]))
+                    got = sess.run(tape.read_weights(read_modes, b, c, f))
+                    assert_array_almost_equal(expected, got)
+
     def test_interface_parameters(self):
         """Test the interface_parameters method."""
         graph = tf.Graph()
