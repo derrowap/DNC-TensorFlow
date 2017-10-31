@@ -3,7 +3,7 @@
 import tensorflow as tf
 import unittest
 
-from numpy.testing import assert_array_almost_equal
+from numpy.testing import assert_array_almost_equal, assert_array_equal
 
 from .. dnc import tape_head
 
@@ -22,6 +22,63 @@ class TapeHeadTest(unittest.TestCase):
         """Test the construction of a TapeHead vector."""
         tape = tape_head.TapeHead()
         self.assertIsInstance(tape, tape_head.TapeHead)
+
+    def test_build(self):
+        """Test the _build method of TapeHead."""
+        graph = tf.Graph()
+        with graph.as_default():
+            with tf.Session(graph=graph) as sess:
+                batch_size = 2
+                num_read_heads = 3
+                word_size = 4
+                inputs = tf.zeros([
+                    batch_size,
+                    num_read_heads * word_size + 3 * word_size + 5 *
+                    num_read_heads + 3
+                ], dtype=tf.float32)
+                tape = tape_head.TapeHead(word_size=word_size,
+                                          num_read_heads=num_read_heads)
+                prev_state = tape.initial_state(batch_size)
+                read_vectors, next_state = tape(inputs, prev_state)
+                read_vectors_shape = sess.run(tf.shape(read_vectors))
+                assert_array_equal([batch_size, num_read_heads, word_size],
+                                   read_vectors_shape)
+
+                (
+                    next_state_read_weights,
+                    next_state_write_weights,
+                    next_state_memory,
+                    next_state_linkage,
+                    next_state_usage,
+                ) = next_state
+                (
+                    expected_read_weights_shape,
+                    expected_write_weights_shape,
+                    expected_memory_shape,
+                    expected_linkage_shape,
+                    expected_usage_shape,
+                ) = tape.state_size
+
+                assert_array_equal(
+                    [batch_size] + expected_read_weights_shape.as_list(),
+                    sess.run(tf.shape(next_state_read_weights)))
+                assert_array_equal(
+                    [batch_size] + expected_write_weights_shape.as_list(),
+                    sess.run(tf.shape(next_state_write_weights)))
+                assert_array_equal(
+                    [batch_size] + expected_memory_shape.memory.as_list(),
+                    sess.run(tf.shape(next_state_memory.memory)))
+                assert_array_equal(
+                    [batch_size] +
+                    expected_linkage_shape.linkage_matrix.as_list(),
+                    sess.run(tf.shape(next_state_linkage.linkage_matrix)))
+                assert_array_equal(
+                    [batch_size] +
+                    expected_linkage_shape.precedence_weights.as_list(),
+                    sess.run(tf.shape(next_state_linkage.precedence_weights)))
+                assert_array_equal(
+                    [batch_size] + expected_usage_shape.usage_vector.as_list(),
+                    sess.run(tf.shape(next_state_usage.usage_vector)))
 
     def test_write_weighting(self):
         """Test the write_weighting method."""
@@ -152,7 +209,7 @@ class TapeHeadTest(unittest.TestCase):
                     'in': [[int(x) for x in range(23)]],
                     'read_keys': [[[0, 1], [2, 3]]],
                     'read_strengths': [[5.0181499279, 6.00671534]],
-                    'write_key': [[6, 7]],
+                    'write_key': [[[6, 7]]],
                     'write_strengths': [[9.000335406]],
                     'erase_vector': [[0.999876605424, 0.99995460]],
                     'write_vector': [[11, 12]],
@@ -169,7 +226,7 @@ class TapeHeadTest(unittest.TestCase):
                            [float(x) / 2 for x in range(12)]],
                     'read_keys': [[[0.0]], [[0.0]]],
                     'read_strengths': [[2.313262], [1.974077]],
-                    'write_key': [[2], [1]],
+                    'write_key': [[[2]], [[1]]],
                     'write_strengths': [[4.048587], [2.701413]],
                     'erase_vector': [[0.982014], [0.880797]],
                     'write_vector': [[5], [2.5]],

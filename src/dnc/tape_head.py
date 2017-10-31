@@ -17,7 +17,7 @@ from .. dnc.temporal_linkage import TemporalLinkage
 from .. dnc.usage import Usage
 
 TapeHeadState = collections.namedtuple('TapeHeadState', (
-    'memory', 'read_weights', 'write_weights', 'linkage', 'usage'))
+    'read_weights', 'write_weights', 'memory', 'linkage', 'usage'))
 
 
 class TapeHead(snt.RNNCore):
@@ -97,14 +97,19 @@ class TapeHead(snt.RNNCore):
         self._word_size = word_size
         self._num_read_heads = num_read_heads
 
-        # TODO(derrowap): when linkage and usage are implemented, use their
-        # state size properties here instead of 'None'.
+        with self._enter_variable_scope():
+            self._external_memory = ExternalMemory(
+                memory_size=self._memory_size, word_size=self._word_size)
+            self._linkage = TemporalLinkage(memory_size=self._memory_size)
+            self._usage = Usage(memory_size=self._memory_size)
+
         self._state_size = TapeHeadState(
-            memory=tf.TensorShape([self._memory_size, self._word_size]),
-            read_weights=tf.TensorShape([self._memory_size]),
+            read_weights=tf.TensorShape([self._num_read_heads,
+                                         self._memory_size]),
             write_weights=tf.TensorShape([self._memory_size]),
-            linkage=None,
-            usage=None)
+            memory=self._external_memory.state_size,
+            linkage=self._linkage.state_size,
+            usage=self._usage.state_size)
 
     def _build(self, inputs, prev_state):
         """Compute one timestep of computation for the Tape Head.
@@ -114,55 +119,73 @@ class TapeHead(snt.RNNCore):
                 word_size + 3 * word_size + 5 * num_read_heads + 3]` emitted
                 from the DNC controller. This holds data that controls what
                 this read head does.
-            prev_state: An instance of 'TapeHeadState' containing the
+            prev_state: An instance of `TapeHeadState` containing the
                 previous state of this Tape Head.
 
         Returns:
             A tuple `(output, next_state)`. Where `output` is a Tensor of
-            shape `[batch_size, word_size]` representing the read vector
-            result, `r_t`. The `next_state` is an instance of `TapeHeadState`
-            representing the next state of this Tape Head after computation
-            finishes.
+            shape `[batch_size, num_read_heads, word_size]` representing the
+            read vector result, `r_t`. The `next_state` is an instance of
+            `TapeHeadState` representing the next state of this Tape Head after
+            computation finishes.
         """
         (
             read_keys, read_strengths, write_key, write_strengths,
             erase_vector, write_vector, free_gates, allocation_gate,
             write_gate, read_modes
         ) = self.interface_parameters(inputs)
-        external_memory = ExternalMemory(memory_size=self._memory_size,
-                                         word_size=self._word_size)
-        usage = Usage(memory_size=self._memory_size)
-        temporal_linkage = TemporalLinkage(memory_size=self._memory_size)
 
-        allocation_weighting = usage(prev_state.write_weights,
-                                     prev_state.read_weights,
-                                     free_gates,
-                                     prev_state.usage)
-        write_content_weighting = external_memory.content_weights(
-            read_keys, read_strengths, prev_state.memory.memory)
-        write_weighting = self.write_weighting(write_gate,
-                                               allocation_gate,
-                                               allocation_weighting,
-                                               write_content_weighting)
-        content_weighting, memory_next_state = external_memory(
+        allocation_weighting, usage_next_state = self._usage(
+            prev_state.write_weights,
+            prev_state.read_weights,
+            free_gates,
+            prev_state.usage)
+
+        write_content_weighting = self._external_memory.content_weights(
+            write_key, write_strengths, prev_state.memory.memory)
+
+        # reshape because num_write_heads is always 1 in a DNC
+        write_content_weighting = tf.reshape(write_content_weighting,
+                                             [-1, self._memory_size])
+
+        write_weights = self.write_weighting(
+            write_gate,
+            allocation_gate,
+            allocation_weighting,
+            write_content_weighting)
+
+        content_weighting, memory_next_state = self._external_memory(
             read_keys,
             read_strengths,
-            write_weighting,
+            write_weights,
             erase_vector,
             write_vector,
             prev_state.memory)
 
-        linkage = temporal_linkage(write_weighting, prev_state.linkage)
+        linkage_next_state = self._linkage(write_weights, prev_state.linkage)
 
         (forward_weighting,
-         backward_weighting) = temporal_linkage.directional_weights(
-            linkage.linkage_matrix, prev_state.read_weights)
+         backward_weighting) = self._linkage.directional_weights(
+            linkage_next_state.linkage_matrix, prev_state.read_weights)
 
-        read_weights = self.read_weights(read_modes, backward_weighting,
-                                         content_weighting, forward_weighting)
-        read_vectors = tf.matmul(memory_next_state.memory, read_weights,
-                                 transpose_a=True)
-        return (read_vectors, prev_state)
+        read_weights = self.read_weights(
+            read_modes,
+            backward_weighting,
+            content_weighting,
+            forward_weighting)
+
+        read_vectors = tf.matmul(read_weights, memory_next_state.memory)
+
+        return (
+            read_vectors,
+            TapeHeadState(
+                read_weights=read_weights,
+                write_weights=write_weights,
+                memory=memory_next_state,
+                linkage=linkage_next_state,
+                usage=usage_next_state,
+            )
+        )
 
     def write_weighting(self,
                         write_gate,
@@ -298,10 +321,10 @@ class TapeHead(snt.RNNCore):
             return 1 + tf.log(1 + tf.exp(x))
 
         offset = 0
-        read_keys, offset = _get([self._num_read_heads, self._memory_size],
+        read_keys, offset = _get([self._num_read_heads, self._word_size],
                                  offset)
         _read_strengths, offset = _get([self._num_read_heads], offset)
-        write_key, offset = _get([self._word_size], offset)
+        write_key, offset = _get([1, self._word_size], offset)
         _write_strengths, offset = _get([1], offset)
         _erase_vector, offset = _get([self._word_size], offset)
         write_vector, offset = _get([self._word_size], offset)
