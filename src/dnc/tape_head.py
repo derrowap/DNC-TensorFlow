@@ -357,4 +357,4 @@ class TapeHead(snt.RNNCore):
     @property
     def output_size(self):
         """Return the output shape."""
-        return tf.TensorShape([self._word_size])
+        return tf.TensorShape([self._num_read_heads, self._word_size])
