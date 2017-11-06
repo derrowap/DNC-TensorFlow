@@ -1,8 +1,8 @@
 # DNC-TensorFlow
-An implementation of the Differential Neural Computer (DNC) in TensorFlow introduced in DeepMind's Nature paper:
+An implementation of the Differential Neural Computer (DNC) in [TensorFlow](https://www.tensorflow.org/), using [Sonnet](https://github.com/deepmind/sonnet), introduced in DeepMind's Nature paper:
 > [“Hybrid computing using a neural network with dynamic external memory", Nature 538, 471–476 (October 2016) doi:10.1038/nature20101.](http://www.nature.com/articles/nature20101.epdf?author_access_token=ImTXBI8aWbYxYQ51Plys8NRgN0jAjWel9jnR3ZoTv0MggmpDmwljGswxVdeocYSurJ3hxupzWuRNeGvvXnoO8o4jTJcnAyhGuZzXJ1GEaD-Z7E6X_a9R-xqJ9TfJWBqz)
 
-**NOTE**: this is currently a work-in-progress
+**NOTE**: this is currently a work-in-progress. The DNC model is now complete, but tasks to test the DNC learning capabilities are still in progress.
 
 Testing
 -------
@@ -14,7 +14,10 @@ You can run all the tests for DNC by executing:
 Alternatively, you can execute individual tests by executing:
 ```
 /DNC-TensorFlow$ python3 -m src.testing.dnc_test
+/DNC-TensorFlow$ python3 -m src.testing.external_memory_test
 /DNC-TensorFlow$ python3 -m src.testing.tape_head_test
+/DNC-TensorFlow$ python3 -m src.testing.temporal_linkage_test
+/DNC-TensorFlow$ python3 -m src.testing.usage_test
 ```
 
 Style Conformance
