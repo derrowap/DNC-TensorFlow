@@ -11,6 +11,9 @@ import collections
 import sonnet as snt
 import tensorflow as tf
 
+# Ensure values are greater than epsilon to avoid numerical instability.
+_EPSILON = 1e-6
+
 UsageState = collections.namedtuple('UsageState', ('usage_vector'))
 
 
@@ -169,6 +172,9 @@ class Usage(snt.RNNCore):
             A Tensor of shape `[batch_size, memory_size]` containing the values
             for the allocation vector for each batch of input.
         """
+        # avoid NaN from tf.cumprod
+        usage_vector = _EPSILON + (1 - _EPSILON) * usage_vector
+
         sorted_usage, indices = self.sorted_indices(usage_vector)
         non_usage = 1 - sorted_usage
         usage_cumprod = tf.cumprod(sorted_usage, axis=1, exclusive=True)
