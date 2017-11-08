@@ -2,7 +2,41 @@
 An implementation of the Differential Neural Computer (DNC) in [TensorFlow](https://www.tensorflow.org/), using [Sonnet](https://github.com/deepmind/sonnet), introduced in DeepMind's Nature paper:
 > [“Hybrid computing using a neural network with dynamic external memory", Nature 538, 471–476 (October 2016) doi:10.1038/nature20101.](http://www.nature.com/articles/nature20101.epdf?author_access_token=ImTXBI8aWbYxYQ51Plys8NRgN0jAjWel9jnR3ZoTv0MggmpDmwljGswxVdeocYSurJ3hxupzWuRNeGvvXnoO8o4jTJcnAyhGuZzXJ1GEaD-Z7E6X_a9R-xqJ9TfJWBqz)
 
-**NOTE**: this is currently a work-in-progress. The DNC model is now complete, but tasks to test the DNC learning capabilities are still in progress.
+Training
+--------
+Currently only the Repeat-Copy task is implemented, but I have plans for more.
+
+Every task has default flags available to them for changing how to train the DNC on the specified task. Every task has their own available parameters described in their own section. Below is a description of all currently available non-task-specific parameters with their default values.
+```
+/DNC-TensorFlow$ python3 -m src.tasks.train \
+> --task=repeat_copy # The task to train the DNC on \
+> --memory_size=16 # The number of memory slots \
+> --word_size=16 # The width of each memory slot \
+> --num_read_heads=1 # The number of memory read heads \
+> --hidden_size=64 # The size of LSTM hidden layer in the controller \
+> --batch_size=16 # The batch size used in training \
+> --num_training_iterations=1000 # Number of iterations to train for \
+> --report_interval=100 # Iterations between reports (samples, valid loss) \
+> --checkpoint_dir=~/tmp/dnc # Checkpoint directory \
+> --checkpoint_interval=-1 # Checkpointing step interval (-1 means never) \
+> --gpu_usage=0.2 # The percent of gpu memory to use for each process \
+> --max_grad_norm=50 # Gradient clipping norm limit \
+> --learning_rate=1e-4 # Optimizer learning rate
+> --optimizer_epsilon=1e-10 # Epsilon used for RMSProp optimizer
+```
+
+### Repeat Copy
+Reference the paper for a description of this task. Essentially, the DNC learns to copy a sequence of binary digits for some number of times. It tests the DNC's ability to store useful information in the external memory, reallocate for new sequences, and not forget sequences as it needs to repeat an increasing number of times.
+
+To execute the training script:
+```
+/DNC-TensorFlow$ python3 -m src.tasks.train --task=repeat_copy \
+> --num_bits=4 # Dimensionality of each vector to copy \
+> --min_length=1 # Lower limit on number of vectors in the observation pattern to copy \
+> --max_length=2 # Upper limit on number of vectors in the observation pattern to copy \
+> --min_repeats=1 # Lower limit on number of copy repeats \
+> --max_repeats=2 # Upper limit on number of copy repeats
+```
 
 Testing
 -------
