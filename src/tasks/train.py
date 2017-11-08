@@ -13,8 +13,8 @@ TO SUPPORT NEW TASKS:
 
 REQUIREMENTS FOR ALL TASKS:
 *   The task's class must be a sub-class of snt.AbstractModule implementing
-    methods `_build(self)`, `cost(output, task_state)`, and
-    `to_string(output, task_state)`.
+    methods `_build(self)`, `cost(output, task_state)`,
+    `to_string(output, task_state)`, and `process_output(output, task_state)`.
 
     *   The `_build(self)` method must return a collections.namedtuple,
         `task_state`, containing at least fields 'input'. Other fields are
@@ -30,6 +30,16 @@ REQUIREMENTS FOR ALL TASKS:
         during training time. Preferrably, this string provides an example
         input/output to show what the DNC model is doing.
 
+    *   The `process_output(output, task_state)` method returns the output back
+        if no processing is needed. This method processes the output passed to
+        `to_string(output, task_state)`, but not to `cost(output, task_state)`.
+        If the output needs to be processed in `cost(output, task_output)`,
+        then that method needs to call it itself. This provides ability to
+        transform the data before `to_string(output, task_state)` converts it
+        to a human readable representation. For example, if the model outputs
+        logits, but you need probabilitites (repeat copy task), then do that
+        here.
+
 *   The task's class has public property `output_size`. This property must be
     an integer representing the size of the output expected from the DNC model
     for each iteration of this task.
@@ -37,7 +47,8 @@ REQUIREMENTS FOR ALL TASKS:
 
 import tensorflow as tf
 
-from repeat_copy import RepeatCopy
+from .. dnc.dnc import DNC
+from . repeat_copy.repeat_copy import RepeatCopy
 
 FLAGS = tf.flags.FLAGS
 
@@ -68,13 +79,21 @@ tf.flags.DEFINE_integer("max_repeats", 2,
                         "Upper limit on number of copy repeats.")
 
 # Training parameters
-tf.flags.DEFINE_integer("num_training_iterations", 10000,
+tf.flags.DEFINE_integer("num_training_iterations", 1000,
                         "Number of iterations to train for.")
 tf.flags.DEFINE_integer("report_interval", 100,
                         "Iterations between reports (samples, valid loss).")
 tf.flags.DEFINE_string("checkpoint_dir", "~/tmp/dnc", "Checkpoint directory.")
 tf.flags.DEFINE_integer("checkpoint_interval", -1,
                         "Checkpointing step interval (-1 means never).")
+tf.flags.DEFINE_float("gpu_usage", 0.2,
+                      "The percent of gpu memory to use for each process.")
+
+# Optimizer parameters
+tf.flags.DEFINE_float("max_grad_norm", 50, "Gradient clipping norm limit.")
+tf.flags.DEFINE_float("learning_rate", 1e-4, "Optimizer learning rate.")
+tf.flags.DEFINE_float("optimizer_epsilon", 1e-10,
+                      "Epsilon used for RMSProp optimizer.")
 
 
 def get_task(task_name):
@@ -83,9 +102,106 @@ def get_task(task_name):
     instantiate_task = [
         lambda: RepeatCopy(
             num_bits=FLAGS.num_bits,
+            batch_size=FLAGS.batch_size,
             min_length=FLAGS.min_length,
             max_length=FLAGS.max_length,
             min_repeats=FLAGS.min_repeats,
             max_repeats=FLAGS.max_repeats),
     ]
-    return instantiate_task[valid_tasks.indexof(task_name)]()
+    return instantiate_task[valid_tasks.index(task_name)]()
+
+
+def run_model(input, output_size):
+    """Run the model on the given input and returns size output_size."""
+    dnc_cell = DNC(output_size,
+                   memory_size=FLAGS.memory_size,
+                   word_size=FLAGS.word_size,
+                   num_read_heads=FLAGS.num_read_heads,
+                   hidden_size=FLAGS.hidden_size)
+
+    initial_state = dnc_cell.initial_state(FLAGS.batch_size, dtype=input.dtype)
+
+    output, _ = tf.nn.dynamic_rnn(
+        cell=dnc_cell,
+        inputs=input,
+        time_major=True,
+        initial_state=initial_state)
+
+    return output
+
+
+def get_config():
+    """Return configuration for a tf.Session using a fraction of GPU memory."""
+    config = tf.ConfigProto()
+    config.gpu_options.per_process_gpu_memory_fraction = FLAGS.gpu_usage
+
+
+def train():
+    """Train the DNC and periodically report the loss."""
+    task = get_task(FLAGS.task)
+
+    task_state = task()
+
+    output = run_model(task_state.observations, task.output_size)
+    output_processed = task.process_output(output, task_state)
+    # responsibility of task.cost to process output if desired
+    train_loss = task.cost(output, task_state)
+
+    trainable_variables = tf.trainable_variables()
+    grads, _ = tf.clip_by_global_norm(
+        tf.gradients(train_loss, trainable_variables), FLAGS.max_grad_norm)
+
+    global_step = tf.Variable(0, trainable=False, name='global_step')
+
+    optimizer = tf.train.RMSPropOptimizer(
+        FLAGS.learning_rate, epsilon=FLAGS.optimizer_epsilon)
+    train_step = optimizer.apply_gradients(
+        zip(grads, trainable_variables), global_step=global_step)
+
+    saver = tf.train.Saver()
+
+    if FLAGS.checkpoint_interval > 0:
+        hooks = [
+            tf.train.CheckpointSaverHook(
+                checkpoint_dir=FLAGS.checkpoint_dir,
+                save_steps=FLAGS.checkpoint_interval,
+                saver=saver)
+        ]
+    else:
+        hooks = []
+
+    # Training time
+    with tf.train.SingularMonitoredSession(
+        hooks=hooks, config=get_config(), checkpoint_dir=FLAGS.checkpoint_dir,
+    ) as sess:
+
+        start_iteration = sess.run(global_step)
+        total_loss = 0
+
+        for train_iteration in range(start_iteration,
+                                     FLAGS.num_training_iterations):
+            _, loss = sess.run([train_step, train_loss])
+            total_loss += loss
+
+            # report periodically
+            if (train_iteration + 1) % FLAGS.report_interval == 0:
+                task_state_eval, output_eval = sess.run(
+                    [task_state, output_processed])
+                report_string = task.to_string(output_eval, task_state_eval)
+                tf.logging.info(
+                    "Train Iteration %d: Avg training loss: %f.\n%s",
+                    train_iteration, total_loss / FLAGS.report_interval,
+                    report_string)
+                # reset total_loss to report the interval's loss only
+                total_loss = 0
+
+    return task
+
+
+def main(unused):
+    """Main method for this app."""
+    tf.logging.set_verbosity(3)  # Print INFO log messages.
+    train()
+
+if __name__ == "__main__":
+    tf.app.run()
