@@ -26,6 +26,7 @@ class DNC(snt.RNNCore):
                  word_size=16,
                  num_read_heads=1,
                  hidden_size=64,
+                 controller='lstm',
                  name='dnc'):
         """Initialize the DNC core.
 
@@ -41,6 +42,8 @@ class DNC(snt.RNNCore):
                 Neural Turing Machine to only 1 in the DNC. Default value is 1.
             hidden_size: The hidden size of the controller LSTM in the DNC.
                 Default value is 64.
+            controller: The type of controller to use in the DNC. Default value
+                is 'lstm', but can also be 'ff' for feed-forward.
             name: The name of the module (default 'dnc').
         """
         super(DNC, self).__init__(name=name)
@@ -60,7 +63,10 @@ class DNC(snt.RNNCore):
             self._tape_head = TapeHead(memory_size=self._memory_size,
                                        word_size=self._word_size,
                                        num_read_heads=self._num_read_heads)
-            self._controller = snt.LSTM(hidden_size=self._hidden_size)
+            if controller == 'ff':
+                self._controller = snt.Linear(output_size=self._hidden_size)
+            else:
+                self._controller = snt.LSTM(hidden_size=self._hidden_size)
 
         self._state_size = DNCState(
             read_vectors=self._tape_head.output_size,
