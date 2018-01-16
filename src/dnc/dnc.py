@@ -53,6 +53,7 @@ class DNC(snt.RNNCore):
         self._num_read_heads = num_read_heads
         self._hidden_size = hidden_size
         self._output_size = output_size
+        self._controller_name = controller
 
         self._interface_vector_size = \
             self._num_read_heads * self._word_size + \
@@ -65,13 +66,16 @@ class DNC(snt.RNNCore):
                                        num_read_heads=self._num_read_heads)
             if controller == 'ff':
                 self._controller = snt.Linear(output_size=self._hidden_size)
+                self._state_size = DNCState(
+                    read_vectors=self._tape_head.output_size,
+                    controller=tf.TensorShape(0),
+                    tape_head=self._tape_head.state_size)
             else:
                 self._controller = snt.LSTM(hidden_size=self._hidden_size)
-
-        self._state_size = DNCState(
-            read_vectors=self._tape_head.output_size,
-            controller=self._controller.state_size,
-            tape_head=self._tape_head.state_size)
+                self._state_size = DNCState(
+                    read_vectors=self._tape_head.output_size,
+                    controller=self._controller.state_size,
+                    tape_head=self._tape_head.state_size)
 
     def _build(self, inputs, prev_state):
         """Compute one timestep of computation with a TF graph with DNC core.
@@ -92,8 +96,12 @@ class DNC(snt.RNNCore):
         controller_input = tf.concat(
             [batch_flatten(inputs), batch_flatten(prev_state.read_vectors)], 1)
 
-        controller_output, controller_state = self._controller(
-            controller_input, prev_state.controller)
+        if self._controller_name == 'ff':
+            controller_output = self._controller(controller_input)
+            controller_state = None
+        else:
+            controller_output, controller_state = self._controller(
+                controller_input, prev_state.controller)
 
         # v_t = W_y[h_t^1; ...; h_t^L]
         controller_output_vector_network = snt.Linear(
