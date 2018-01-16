@@ -25,26 +25,36 @@ REQUIREMENTS FOR ALL TASKS:
     *   The `cost(output, task_state)` method must return the losses for the
         model to be used in `tf.gradients(losses, trainable_variables)`.
 
-    *   The `to_string(output, task_state)` method must return a string. This
-        string will be logged to the console every time a report comes up
-        during training time. Preferrably, this string provides an example
-        input/output to show what the DNC model is doing.
+    *   The `to_string(output, task_state, model_state)` method must return a
+        string. This string will be logged to the console every time a report
+        comes up during training time. Preferrably, this string provides an
+        example input/output to show what the DNC model is doing.
 
-    *   The `process_output(output, task_state)` method returns the output back
-        if no processing is needed. This method processes the output passed to
-        `to_string(output, task_state)`, but not to `cost(output, task_state)`.
-        If the output needs to be processed in `cost(output, task_output)`,
-        then that method needs to call it itself. This provides ability to
-        transform the data before `to_string(output, task_state)` converts it
-        to a human readable representation. For example, if the model outputs
-        logits, but you need probabilitites (repeat copy task), then do that
-        here.
+    *   The `process_output(output, task_state, model_state)` method returns
+        the output back if no processing is needed. This method processes the
+        output passed to `to_string(output, task_state)`, but not to
+        `cost(output, task_state)`. If the output needs to be processed in
+        `cost(output, task_output)`, then that method needs to call it itself.
+        This provides ability to transform the data before
+        `to_string(output, task_state)` converts it to a human readable
+        representation. For example, if the model outputs logits, but you need
+        probabilitites (repeat copy task), then do that here.
 
 *   The task's class has public property `output_size`. This property must be
     an integer representing the size of the output expected from the DNC model
     for each iteration of this task.
 """
 
+"""
+Repeat copy task:
+python3 -m src.tasks.train --controller=ff --num_read_heads=1 --memory_size=5 --word_size=5 --batch_size=10 --max_repeats=1 --gpu_usage=0.8 --num_bits=5 --min_length=5 --max_length=5 --checkpoint_dir=src/tasks/repeat_copy/checkpoints --checkpoint_interval=10000 --num_training_iterations=100000
+python3 -m src.tasks.train --controller=ff --num_read_heads=1 --memory_size=5 --word_size=5 --batch_size=1 --max_repeats=1 --gpu_usage=0.3 --num_bits=5 --min_length=5 --max_length=5 --checkpoint_dir=src/tasks/repeat_copy/checkpoints --checkpoint_interval=10000 --num_training_iterations=102000
+
+Model for Figure:
+python3 -m src.tasks.train --controller=ff --num_read_heads=1 --memory_size=10 --word_size=3 --batch_size=10 --max_repeats=1 --gpu_usage=0.8 --num_bits=6 --min_length=5 --max_length=5 --checkpoint_dir=src/tasks/repeat_copy/checkpoints --checkpoint_basename=model-word-size-3.ckpt --checkpoint_interval=10000 --num_training_iterations=100000
+"""
+
+import sonnet as snt
 import tensorflow as tf
 
 from .. dnc.dnc import DNC
@@ -59,6 +69,8 @@ tf.flags.DEFINE_integer("num_read_heads", 1,
                         "The number of memory read heads.")
 tf.flags.DEFINE_integer("hidden_size", 64,
                         "The size of LSTM hidden layer in the controller.")
+tf.flags.DEFINE_string("controller", "lstm", "The type of controller to use "
+                       "(options: [lstm, ff]).")
 
 # Task parameters
 tf.flags.DEFINE_integer("batch_size", 16, "The batch size used in training.")
@@ -84,10 +96,14 @@ tf.flags.DEFINE_integer("num_training_iterations", 1000,
 tf.flags.DEFINE_integer("report_interval", 100,
                         "Iterations between reports (samples, valid loss).")
 tf.flags.DEFINE_string("checkpoint_dir", "~/tmp/dnc", "Checkpoint directory.")
+tf.flags.DEFINE_string("checkpoint_basename", "model.ckpt",
+                       "Base name for the checkpoint files")
 tf.flags.DEFINE_integer("checkpoint_interval", -1,
                         "Checkpointing step interval (-1 means never).")
 tf.flags.DEFINE_float("gpu_usage", 0.2,
                       "The percent of gpu memory to use for each process.")
+tf.flags.DEFINE_boolean("test", False,
+                        "Whether this is testing the model or not.")
 
 # Optimizer parameters
 tf.flags.DEFINE_float("max_grad_norm", 50, "Gradient clipping norm limit.")
@@ -119,15 +135,59 @@ def run_model(input, output_size):
                    num_read_heads=FLAGS.num_read_heads,
                    hidden_size=FLAGS.hidden_size)
 
-    initial_state = dnc_cell.initial_state(FLAGS.batch_size, dtype=input.dtype)
+    if FLAGS.test:
+        prev_state = dnc_cell.initial_state(1, dtype=input.dtype)
+    else:
+        prev_state = dnc_cell.initial_state(FLAGS.batch_size,
+                                            dtype=input.dtype)
 
-    output, _ = tf.nn.dynamic_rnn(
-        cell=dnc_cell,
+    if FLAGS.test:
+        model_state = {
+            'rw': prev_state.tape_head.read_weights,
+            'ww': prev_state.tape_head.write_weights,
+            'fg': prev_state.tape_head.free_gate,
+            'ag': prev_state.tape_head.alloc_gate,
+        }
+        output = None
+        model_state_t = prev_state
+        for time_index in range(13):
+            output_t, model_state_t = tf.nn.dynamic_rnn(
+                cell=dnc_cell,
+                inputs=tf.expand_dims(input[time_index, :, :], 0),
+                time_major=True,
+                initial_state=model_state_t)
+            if output == None:
+                output = output_t
+            else:
+                output = tf.concat([output, output_t], 0)
+            model_state['rw'] = tf.concat(
+                [model_state['rw'], model_state_t.tape_head.read_weights], 0)
+            model_state['ww'] = tf.concat(
+                [model_state['ww'], model_state_t.tape_head.write_weights], 0)
+            model_state['fg'] = tf.concat(
+                [model_state['fg'], model_state_t.tape_head.free_gate], 0)
+            model_state['ag'] = tf.concat(
+                [model_state['ag'], model_state_t.tape_head.alloc_gate], 0)
+    else:
+        output, model_state = tf.nn.dynamic_rnn(
+            cell=dnc_cell,
+            inputs=input,
+            time_major=True,
+            initial_state=prev_state)
+
+    return output, model_state
+
+
+def run_lstm_baseline(input, output_size):
+    """Run a basic LSTM basline model on given input."""
+    lstm = snt.LSTM(hidden_size=output_size)
+    initial_state = lstm.initial_state(FLAGS.batch_size, dtype=input.dtype)
+    output, model_state = tf.nn.dynamic_rnn(
+        cell=lstm,
         inputs=input,
         time_major=True,
         initial_state=initial_state)
-
-    return output
+    return output, model_state
 
 
 def get_config():
@@ -142,8 +202,9 @@ def train():
 
     task_state = task()
 
-    output = run_model(task_state.observations, task.output_size)
-    output_processed = task.process_output(output, task_state)
+    output, model_state = run_model(task_state.observations, task.output_size)
+
+    output_processed = task.process_output(output, task_state, model_state)
     # responsibility of task.cost to process output if desired
     train_loss = task.cost(output, task_state)
 
@@ -164,6 +225,7 @@ def train():
         hooks = [
             tf.train.CheckpointSaverHook(
                 checkpoint_dir=FLAGS.checkpoint_dir,
+                checkpoint_basename=FLAGS.checkpoint_basename,
                 save_steps=FLAGS.checkpoint_interval,
                 saver=saver)
         ]
@@ -180,14 +242,19 @@ def train():
 
         for train_iteration in range(start_iteration,
                                      FLAGS.num_training_iterations):
-            _, loss = sess.run([train_step, train_loss])
+            if FLAGS.test:
+                loss = sess.run(train_loss)
+            else:
+                _, loss = sess.run([train_step, train_loss])
             total_loss += loss
 
             # report periodically
             if (train_iteration + 1) % FLAGS.report_interval == 0:
-                task_state_eval, output_eval = sess.run(
-                    [task_state, output_processed])
-                report_string = task.to_string(output_eval, task_state_eval)
+                task_state_eval, output_eval, model_state_eval = sess.run(
+                    [task_state, output_processed, model_state])
+                report_string = task.to_string(
+                    output_eval, task_state_eval, model_state_eval,
+                    verbose=FLAGS.test)
                 tf.logging.info(
                     "Train Iteration %d: Avg training loss: %f.\n%s",
                     train_iteration, total_loss / FLAGS.report_interval,
