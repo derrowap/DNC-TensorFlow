@@ -1,0 +1,2 @@
+model_checkpoint_path: "model-word-size-10.ckpt-100000"
+all_model_checkpoint_paths: "model-word-size-10.ckpt-100000"
