@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+#==============================================================================
 """A repeat copy task."""
 from __future__ import absolute_import
 from __future__ import division
@@ -112,6 +112,104 @@ def bitstring_readable(data, batch_size, model_output=None, whole_batch=False):
         batch_strings.append('\n\n'.join(strings))
 
     return '\n' + '\n\n\n\n'.join(batch_strings)
+
+
+def readable_model(model_state, batch_size, whole_batch=False):
+    """Produces a readable representation of the model state.
+
+    Args:
+        model_state: A tuple given by the DNC representing the internal state
+            of the model.
+        batch_size: size of batch.
+        whole_batch: Whether to visualize the whole batch. Only the first
+            sample will be visualized if False.
+
+    Returns:
+        A string used to visualize the model state.
+    """
+    format_string = \
+      "\nRead Weights  = {}\n" \
+        "Write Weights = {}\n" \
+        "Free Gate     = {}\n" \
+        "Alloc. Gate   = {}\n"
+    if whole_batch:
+        return format_string.format(
+            model_state.tape_head.read_weights,
+            model_state.tape_head.write_weights,
+            model_state.tape_head.free_gate,
+            model_state.tape_head.alloc_gate)
+    return format_string.format(
+        model_state.tape_head.read_weights[-1],
+        model_state.tape_head.write_weights[-1],
+        model_state.tape_head.free_gate[-1],
+        model_state.tape_head.alloc_gate[-1])
+
+
+def arr_to_str(a):
+    output = "["
+    for i in range(len(a)):
+        output += str(a[i])
+        if i == len(a) - 1:
+            break
+        output += ", "
+    output += "]"
+    return output
+
+
+def figure_data(data, output, model_state, batch_size):
+    input_str = "\n# shape = {}\nobs_str = np.array([\n".format(
+        str(data.observations.shape))
+    for batch_index in range(batch_size):
+        obs = data.observations[:, batch_index, :]
+        for input_row_index in range(obs.shape[0]):
+            input_str += "\t" + arr_to_str(obs[input_row_index, :]) + ",\n"
+    input_str += "])"
+
+    output_str = "# shape = {}\noutput_str = np.array([\n".format(
+        str(output.shape))
+    for batch_index in range(batch_size):
+        out = output[:, batch_index, :]
+        for out_row_index in range(out.shape[0]):
+            out_row = out[out_row_index, :]
+            output_str += "\t" + arr_to_str(out_row) + ",\n"
+    output_str += "])"
+
+    rw_str = "# shape = {}\nrw_str = np.array([\n".format(
+        str(model_state['rw'].shape))
+    for rw_t in model_state['rw']:
+        rw_str += "\t" + arr_to_str(rw_t[0]) + ",\n"
+    rw_str += "])"
+
+    ww_str = "# shape = {}\nww_str = np.array([\n".format(
+        str(model_state['ww'].shape))
+    for ww_t in model_state['ww']:
+        ww_str += "\t" + arr_to_str(ww_t) + ",\n"
+    ww_str += "])"
+
+    fg_str = "# shape = {}\nfg_str = np.array([\n\t".format(
+        str(model_state['fg'].shape))
+    count = 0
+    for fg_t in model_state['fg']:
+        fg_str += str(fg_t[0]) + ", "
+        count += 1
+        if count == 6:
+            count = 0
+            fg_str += "\n\t"
+    fg_str += "])"
+
+    ag_str = "# shape = {}\nag_str = np.array([\n\t".format(
+        str(model_state['ag'].shape))
+    count = 0
+    for ag_t in model_state['ag']:
+        ag_str += str(ag_t[0]) + ", "
+        count += 1
+        if count == 6:
+            count = 0
+            ag_str += "\n\t"
+    ag_str += "])"
+    return input_str + "\n" + output_str + "\n" + rw_str + "\n" + ww_str \
+        + "\n" + fg_str + "\n" + ag_str + "\n"
+
 
 
 class RepeatCopy(snt.AbstractModule):
@@ -398,7 +496,7 @@ class RepeatCopy(snt.AbstractModule):
             time_average=self.time_average_cost,
             log_prob_in_bits=self.log_prob_in_bits)
 
-    def to_string(self, output, task_state):
+    def to_string(self, output, task_state, model_state, verbose=False):
         """Return human readable version of data."""
         obs = task_state.observations
         unnormalised_num_reps_flag = self._unnormalise(
@@ -406,9 +504,14 @@ class RepeatCopy(snt.AbstractModule):
         obs = np.concatenate([obs[:, :, :-1], unnormalised_num_reps_flag],
                              axis=2)
         data = task_state._replace(observations=obs)
-        return bitstring_readable(data, self.batch_size, output)
+        output_str = bitstring_readable(
+            data, self.batch_size, output, whole_batch=verbose)
+        if verbose:
+            output_str += figure_data(
+                data, output, model_state, self.batch_size)
+        return output_str
 
-    def process_output(self, output, task_state):
+    def process_output(self, output, task_state, model_state):
         """Change output logits to output probabilities."""
         return tf.round(
             tf.expand_dims(task_state.mask, -1) * tf.sigmoid(output))
