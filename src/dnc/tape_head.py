@@ -17,7 +17,8 @@ from .. dnc.temporal_linkage import TemporalLinkage
 from .. dnc.usage import Usage
 
 TapeHeadState = collections.namedtuple('TapeHeadState', (
-    'read_weights', 'write_weights', 'memory', 'linkage', 'usage'))
+    'read_weights', 'write_weights', 'alloc_gate', 'free_gate', 'memory',
+    'linkage', 'usage'))
 
 
 class TapeHead(snt.RNNCore):
@@ -107,6 +108,8 @@ class TapeHead(snt.RNNCore):
             read_weights=tf.TensorShape([self._num_read_heads,
                                          self._memory_size]),
             write_weights=tf.TensorShape([self._memory_size]),
+            alloc_gate=tf.TensorShape([1]),
+            free_gate=tf.TensorShape([self._num_read_heads]),
             memory=self._external_memory.state_size,
             linkage=self._linkage.state_size,
             usage=self._usage.state_size)
@@ -181,6 +184,8 @@ class TapeHead(snt.RNNCore):
             TapeHeadState(
                 read_weights=read_weights,
                 write_weights=write_weights,
+                alloc_gate=allocation_gate,
+                free_gate=free_gates,
                 memory=memory_next_state,
                 linkage=linkage_next_state,
                 usage=usage_next_state,
