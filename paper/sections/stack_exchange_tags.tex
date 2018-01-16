@@ -1,0 +1,38 @@
+Automatic summarization is a term used to describe the action of processing
+some text to output some form of a meaningful summary in a representative
+manner. Extraction-based summarization is a type of automatic summarization in
+which the goal is to extract key-terms as the summary of some text.
+
+As a novel application for the DNC, I applied it to the extraction-based
+summarization task of generating tags from Stack Exchange questions. I obtained
+a dataset from the Facebook Recruiting III - Keyword Extraction\footnote{can be
+found at https://www.kaggle.com/c/facebook-recruiting-iii-keyword-extraction/}
+competition on Kaggle. The training dataset contains 6,034,195 questions and
+the testing dataset contains 2,013,337 questions. The correct answers for the
+testing dataset are not publicly available, but submissions can still be scored
+on the Kaggle competition. Scores reported for this task are mean F-scores as
+determined by the Kaggle submission report. For example, $1.0$ means a perfect
+score and $0.0$ means nothing correct at all. When the competition was live
+four years ago (August 30, 2013), the winner received a score of $0.81350$.
+
+Each question contains three main features: title, question, tags. The training
+dataset includes all three features while the testing dataset only contains the
+title and question features. Below is an example from the training dataset:
+\blockquote{
+\textbf{Title:} How to check if an uploaded file is an image without mime type?
+\\ \\
+\textbf{Question:} {\textless}p{\textgreater}I'd like to check if an uploaded
+file is an image file (e.g png, jpg, jpeg, gif, bmp) or another file. The
+problem is that I'm using Uploadify to upload the files, which changes the mime
+type and gives a 'text/octal' or something as the mime type, no matter which
+file type you upload.%
+{\textless}/p{\textgreater}{\textbackslash}n{\textbackslash}n%
+{\textless}p{\textgreater}Is there a way to check if the uploaded file is an
+image apart from checking the file extension using PHP?%
+{\textless}/p{\textgreater}{\textbackslash}n
+\\ \\
+\textbf{Tags:} php image-processing file-upload upload mime-types}
+The data comes directly from user-posted questions with only anonymization
+changes. The length of the features can all be different for each question. The
+goal for the testing dataset is to receive the title and question features as
+input and output the tags feature.

@@ -2,6 +2,8 @@
 \usepackage[utf8]{inputenc}
 \usepackage[english]{babel}
 \usepackage{graphicx}
+\usepackage[autostyle]{csquotes}
+\usepackage{amsmath}
 \usepackage{indentfirst}
 \graphicspath{{resources/}}
 \usepackage[a4paper,width=150mm,top=25mm,bottom=25mm]{geometry}
@@ -12,7 +14,7 @@
 \fancyfoot{}
 \fancyfoot[L,RO]{\thepage}
 \fancyfoot[LO,C]{Chapter \thechapter}
-\fancyfoot[CO,R]{Author Name}
+\fancyfoot[CO,R]{Austin Derrow-Pinion}
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\footrulewidth}{0.4pt}
 
@@ -35,6 +37,12 @@
 
 \chapter{Introduction}
 \input{sections/introduction}
+
+\chapter{Dynamic Memory Allocation}
+\input{sections/repeat_copy}
+
+\chapter{Extraction-Based Summarization Task}
+\input{sections/stack_exchange_tags}
 
 \chapter{Conclusion}
 \input{sections/conclusion}
