@@ -202,7 +202,7 @@ def train():
 
     task_state = task()
 
-    output, model_state = run_model(task_state.observations, task.output_size)
+    output, model_state = run_model(task_state.input, task.output_size)
 
     output_processed = task.process_output(output, task_state, model_state)
     # responsibility of task.cost to process output if desired

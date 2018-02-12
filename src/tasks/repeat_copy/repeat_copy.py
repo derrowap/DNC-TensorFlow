@@ -22,7 +22,7 @@ import numpy as np
 import sonnet as snt
 import tensorflow as tf
 
-DatasetTensors = collections.namedtuple('DatasetTensors', ('observations',
+DatasetTensors = collections.namedtuple('DatasetTensors', ('input',
                                                            'target', 'mask'))
 
 
@@ -85,7 +85,7 @@ def bitstring_readable(data, batch_size, model_output=None, whole_batch=False):
         return '+' + ' '.join(['-' if x == 0 else '%d' % x for x in datum]) + \
             '+'
 
-    obs_batch = data.observations
+    obs_batch = data.input
     targ_batch = data.target
 
     iterate_over = range(batch_size) if whole_batch else range(1)
@@ -158,9 +158,9 @@ def arr_to_str(a):
 
 def figure_data(data, output, model_state, batch_size):
     input_str = "\n# shape = {}\nobs_str = np.array([\n".format(
-        str(data.observations.shape))
+        str(data.input.shape))
     for batch_index in range(batch_size):
-        obs = data.observations[:, batch_index, :]
+        obs = data.input[:, batch_index, :]
         for input_row_index in range(obs.shape[0]):
             input_str += "\t" + arr_to_str(obs[input_row_index, :]) + ",\n"
     input_str += "])"
@@ -498,12 +498,12 @@ class RepeatCopy(snt.AbstractModule):
 
     def to_string(self, output, task_state, model_state, verbose=False):
         """Return human readable version of data."""
-        obs = task_state.observations
+        obs = task_state.input
         unnormalised_num_reps_flag = self._unnormalise(
             obs[:, :, -1:]).round()
         obs = np.concatenate([obs[:, :, :-1], unnormalised_num_reps_flag],
                              axis=2)
-        data = task_state._replace(observations=obs)
+        data = task_state._replace(input=obs)
         output_str = bitstring_readable(
             data, self.batch_size, output, whole_batch=verbose)
         if verbose:
