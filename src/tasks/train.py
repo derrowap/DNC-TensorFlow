@@ -45,20 +45,11 @@ REQUIREMENTS FOR ALL TASKS:
     for each iteration of this task.
 """
 
-"""
-Repeat copy task:
-python3 -m src.tasks.train --controller=ff --num_read_heads=1 --memory_size=5 --word_size=5 --batch_size=10 --max_repeats=1 --gpu_usage=0.8 --num_bits=5 --min_length=5 --max_length=5 --checkpoint_dir=src/tasks/repeat_copy/checkpoints --checkpoint_interval=10000 --num_training_iterations=100000
-python3 -m src.tasks.train --controller=ff --num_read_heads=1 --memory_size=5 --word_size=5 --batch_size=1 --max_repeats=1 --gpu_usage=0.3 --num_bits=5 --min_length=5 --max_length=5 --checkpoint_dir=src/tasks/repeat_copy/checkpoints --checkpoint_interval=10000 --num_training_iterations=102000
-
-Model for Figure:
-python3 -m src.tasks.train --controller=ff --num_read_heads=1 --memory_size=10 --word_size=3 --batch_size=10 --max_repeats=1 --gpu_usage=0.8 --num_bits=6 --min_length=5 --max_length=5 --checkpoint_dir=src/tasks/repeat_copy/checkpoints --checkpoint_basename=model-word-size-3.ckpt --checkpoint_interval=10000 --num_training_iterations=100000
-"""
-
+from .. dnc.dnc import DNC
+from . dna_sequencing.dna_sequencing import DNASequencing
+from . repeat_copy.repeat_copy import RepeatCopy
 import sonnet as snt
 import tensorflow as tf
-
-from .. dnc.dnc import DNC
-from . repeat_copy.repeat_copy import RepeatCopy
 
 FLAGS = tf.flags.FLAGS
 
@@ -114,7 +105,7 @@ tf.flags.DEFINE_float("optimizer_epsilon", 1e-10,
 
 def get_task(task_name):
     """Instantiate a task with all valid flags that provides training data."""
-    valid_tasks = ["repeat_copy"]
+    valid_tasks = ["repeat_copy", "dna_sequencing"]
     instantiate_task = [
         lambda: RepeatCopy(
             num_bits=FLAGS.num_bits,
@@ -123,6 +114,8 @@ def get_task(task_name):
             max_length=FLAGS.max_length,
             min_repeats=FLAGS.min_repeats,
             max_repeats=FLAGS.max_repeats),
+        lambda: DNASequencing(
+            batch_size=FLAGS.batch_size),
     ]
     return instantiate_task[valid_tasks.index(task_name)]()
 
@@ -135,13 +128,13 @@ def run_model(input, output_size):
                    num_read_heads=FLAGS.num_read_heads,
                    hidden_size=FLAGS.hidden_size)
 
-    if FLAGS.test:
+    if FLAGS.test and FLAGS.task == "repeat_copy":
         prev_state = dnc_cell.initial_state(1, dtype=input.dtype)
     else:
         prev_state = dnc_cell.initial_state(FLAGS.batch_size,
                                             dtype=input.dtype)
 
-    if FLAGS.test:
+    if FLAGS.test and FLAGS.task == "repeat_copy":
         model_state = {
             'rw': prev_state.tape_head.read_weights,
             'ww': prev_state.tape_head.write_weights,
@@ -156,7 +149,7 @@ def run_model(input, output_size):
                 inputs=tf.expand_dims(input[time_index, :, :], 0),
                 time_major=True,
                 initial_state=model_state_t)
-            if output == None:
+            if output is None:
                 output = output_t
             else:
                 output = tf.concat([output, output_t], 0)
@@ -202,6 +195,7 @@ def train():
 
     task_state = task()
 
+    # output, model_state = run_model(task_state.input, task.output_size)
     output, model_state = run_model(task_state.input, task.output_size)
 
     output_processed = task.process_output(output, task_state, model_state)
@@ -255,12 +249,14 @@ def train():
                 report_string = task.to_string(
                     output_eval, task_state_eval, model_state_eval,
                     verbose=FLAGS.test)
-                tf.logging.info(
-                    "Train Iteration %d: Avg training loss: %f.\n%s",
-                    train_iteration, total_loss / FLAGS.report_interval,
-                    report_string)
-                # reset total_loss to report the interval's loss only
-                total_loss = 0
+                if not FLAGS.test:
+                    tf.logging.info(
+                        "Train Iteration %d: Avg training loss: %f.\n",
+                        train_iteration, total_loss / FLAGS.report_interval)
+                    # reset total_loss to report the interval's loss only
+                    total_loss = 0
+                if report_string != "":
+                    tf.logging.info(report_string)
 
     return task
 
