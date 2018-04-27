@@ -1,0 +1,253 @@
+Recurrent neural networks (RNNs) are Turing-Complete models that can perform
+complex transformations on the data over an extended period of time
+\cite{siegelmann1995computational}. Since RNNs are Turing-Complete, it is
+evident that these models in theory can be used to solve any problems a
+Turing machine can solve. However, a given problem may require a very specific
+and complex setup of an RNN. Therefore we do not take the time to set up
+RNNs manually in a way that it solves a specific problem. Rather, we design
+rich architectures with the means of learning how to solve a problem in
+an efficient manner. RNNs and models alike are trained using gradient descent
+so that it solves a given problem with greater accuracy than before.
+
+\section{Neural Turing Machines}
+The Neural Turing Machine (NTM) is an RNN with a rich design that enables it to
+learn how to solve problems better than basic RNNs. The NTM is an RNN with the
+means of addressing a differentiable memory unit external to that of the model
+itself \cite{DBLP:journals/corr/GravesWD14}.
+Because of this differentiable memory unit, the model can learn what is most
+important to store in memory. An efficient model would learn what information
+is most useful and store that in memory to be read at a later timestep with the
+assumption that the read results in a better solution to the task.
+This creates a model that can more strongly refer to important imformation
+that was present much earlier than a given timestep.
+
+The NTM can be described as four main components: controller, read heads,
+write heads, memory. The data flow of these four components is described
+in Figure ~\ref{fig:NTMArchitecture}. Even though these components work in a
+non-traditional manner, the model as a whole can be interacted with and
+trained the same way you would any other RNN. The model simply receives
+some external input at each timestep and will produce an external output
+at each timestep. The components of the NTM are comparable to that of a
+Turing machine, such that it contains read and write heads that interact
+with a memory unit \cite{DBLP:journals/corr/GravesWD14}. Unlike a Turing
+machine however, the NTM is end to end differentiable
+\cite{DBLP:journals/corr/GravesWD14}. This feature gives the model a lot of
+power in the field of Deep Learning research.
+
+\begin{figure}[!htb]
+    \centering
+    \includegraphics[width=0.9\linewidth]{resources/NTM.png}
+    \caption{
+        The components inside the dotted line represent everything the NTM
+        is. The arrows represent the control flow of the data starting
+        as \textit{External Input} fed into the \textit{Controller}. The
+        \textit{Controller} can then activate either \textit{Read Heads} or
+        \textit{Write Heads}. The \textit{Read Heads} do not receive any
+        information about the \textit{External Input}, but is rather told what
+        to read in \textit{Memory} by the \textit{Controller}. The
+        \textit{Controller} can send information from the
+        \textit{External Input} to the \textit{Write Heads} which then
+        write that information into memory. The \textit{Controller} receives
+        data back from the \textit{Read Heads} and then produces an
+        \textit{External Output} \cite{DBLP:journals/corr/GravesWD14}.
+    }
+    \label{fig:NTMArchitecture}
+\end{figure}
+
+The memory unit is a matrix where the rows represent a memory location and the
+number of columns correspond to how large each memory location is
+\cite{DBLP:journals/corr/GravesWD14}. The read head emits a weighting vector
+the length of the number of memory locations at each timestep
+\cite{DBLP:journals/corr/GravesWD14}. A read operation on the memory matrix
+is then a convex combination between this weighting and the contents of the
+memory matrix \cite{DBLP:journals/corr/GravesWD14}. Using a weighting vector
+here empowers the read head to narrowly focus on a single memory location's
+information or to use a wider focus by using a little bit of information
+from many different memory locations. The differentiability of the model allows
+the read heads to learn the best weighting vectors to emit at a given state for
+some timestep.
+
+Writing to memory in the NTM is done with an erase operation followed by an
+addition operation \cite{DBLP:journals/corr/GravesWD14}. The write head
+emits three vectors at each timestep: \textit{weighting vector, erase vector,
+add vector} \cite{DBLP:journals/corr/GravesWD14}. Assuming a weighting of $1$
+for a memory location, a value of $1$ in the \textit{erase vector} at location
+$j$ would mean to set the memory to $0$ in column $j$ within that memory
+location \cite{DBLP:journals/corr/GravesWD14}. However, an
+\textit{erase vector} with a value of $1$ can possibly not erase any
+information in a memory location if the weighting for that memory location is
+$0$ \cite{DBLP:journals/corr/GravesWD14}. So the \textit{erase vector}
+represents the degree to which information in columns for weighted memory
+locations shall be erased. As one would suspect, the \textit{add vector} works
+quite oppositely from that of the \textit{erase vector}. Again assuming a
+weighting of $1$ for a memory location, a value of $1$ in the
+\textit{add vector} at location $j$ would mean to add $1$ to whatever value
+is already stored in that memory location in column $j$
+\cite{DBLP:journals/corr/GravesWD14}. Similarly to that of the
+\textit{erase vector}, the weighting can overrule the \textit{add vector} by
+having a value of $0$ for some location \cite{DBLP:journals/corr/GravesWD14}.
+In other words, a value of $0$ in the \textit{weighting vector} means it does
+not matter what the \textit{add vector} is because nothing will be added to
+that memory location.
+
+The weighting vectors emitted by both read and write heads are done so
+through two different addressing mechanisms: \textit{content-based addressing},
+\textit{location-based addressing} \cite{DBLP:journals/corr/GravesWD14}.
+Content-based addressing compares a key vector with all of the memory locations
+\cite{DBLP:journals/corr/GravesWD14}. This produces a weighting that has
+greater values in locations that are most similar to that key vector and
+lesser values in locations that are least similar to that key vector
+\cite{DBLP:journals/corr/GravesWD14}. This addressing mechanism is useful for
+easily identifying data in the memory matrix simply by producing an
+approximation of that data. The location-based addressing mechanism is better
+suited for iterating through sequence data or even jumping to a specific
+memory location that may have a range of unknown data stored there. If the
+previous weighting for a head was focused on location $j$, the location-based
+addressing mechanism can easily produce a new weighting that focuses on
+location $j-1$, $j$, or $j+1$. The choice between using these two addressing
+mechanisms is controlled through a gating parameter emitted by the controller.
+If this gating parameter is equal to $0$, then it will only use location-based
+addressing. If the gating parameter is equal to $1$, then it will only use
+content-based addressing. If the gating parameter is somewhere between
+$0$ and $1$, it will use a mixture of both addressing mechanisms.
+
+\section{Differentiable Neural Computers}
+The Differentiable Neural Computer (DNC) is similar to that of the NTM, but
+enhanced in it's ability to address the augmented external memory. These
+enhancements make the DNC more capable than the NTM at solving complex,
+structured tasks. Similarly to the NTM, the DNC is differentiable end-to-end
+except one operation in which the researchers claim do not make a significant
+impact on the model as a whole \cite{graves2016hybrid}.
+
+A NTM is allowed any number of read and write heads, but the DNC limits
+the number of write heads to be only one \cite{graves2016hybrid}. The NTM
+was only able to iterate through consecutive written locations until a
+content-based addressing write occured \cite{graves2016hybrid}. The DNC,
+however, can continue iterating through consecutive written locations because
+it has, what the researchers call, a temporal linkage matrix
+\cite{graves2016hybrid}. The temporal linkage matrix, $L$, is $N \times N$ with
+weighted values between zero and one \cite{graves2016hybrid}. A value closer
+to one at position $(i, j)$ means memory location $i$ was written to directly
+after memory location $j$ was written to \cite{graves2016hybrid}. Otherwise,
+the value should be near zero \cite{graves2016hybrid}. So given a weighting
+vector, $\bf{w}$, the vector produced by $L\bf{w}$ augments the weighting to
+focus on memory locations written to directly \textit{after} those
+locations focused on by weighting $\bf{w}$ \cite{graves2016hybrid}.
+Conveniently, the vector produced by $L^\top \bf{w}$ augments the weighting to
+focus on memory locations written to directly \textit{before} those
+locations focused on by weighting $\bf{w}$ \cite{graves2016hybrid}. This
+interaction between the temporal linkage matrix and the external memory is one
+of the three differentiable attention mechanisms in the DNC
+\cite{graves2016hybrid}. This attention mechanism replaces the location-based
+addressing method from the NTM. The temporal linkage matrix allows the DNC to
+better handle sequential data that is not necessarily written to in sequential
+memory locations. This is a more powerful concept than that of the NTM's
+location-based addressing mechanism which was limited to sequential
+memory locations.
+
+Like the NTM, the DNC uses a content-based addressing mechanism that produces
+a weighting vector focusing on memory locations most similar to some
+emitted key vector \cite{graves2016hybrid}. Similarity in both cases are
+defined as cosine similarity
+\cite{DBLP:journals/corr/GravesWD14,graves2016hybrid}. If the DNC controller
+emits a key vector with only part of the information it needs, this
+content-based addressing mechanism can be used to read the complete
+information related to it. In theory this allows the DNC to iterate
+through data structures in which memory locations reference other memory
+locations through a key-value address mechanism.
+
+Unlike the NTM, the DNC uses a \textit{usage vector} to find the best memory
+locations to write to and to identify any important memory locations not to
+write to \cite{graves2016hybrid}. The vector's values range between zero and
+one, where values closer to one means the memory locations have greater usages
+\cite{graves2016hybrid}. The weighting vector given to a write head focuses on
+unused locations, where the usage vector has low values
+\cite{graves2016hybrid}. When the write head writes to a memory location, the
+usage vector is updated at that memory location by increasing the value
+\cite{graves2016hybrid}. The usage vector is also capable of decreasing values
+in a memory location after it is read \cite{graves2016hybrid}. For example,
+consider a task which provides a sequence of numbers and then asks what that
+sequence was. After asking for what a sequence was, it will provide a new
+sequence of numbers and repeat itself. The DNC can learn to write that
+sequence of numbers in the external memory using the write heads. At that
+point, the usage vector will have greater values in those locations written
+to and lower values in the locations not needed. When the task asks for the
+sequence of numbers, the DNC would use the read heads to read those locations
+written to. After the reads, the usage vector will update the memory locations
+to have low usage. This effectively reallocates the memory locations for
+later usage.
+
+The DNC is very comparable to how a human interacts with what we think of as
+a modern day computer. Much of the human interaction with computers are done
+automatically with a trained DNC. For instance, a human controls more or less
+exactly what to read and write in memory. The DNC however, learns what
+information is most useful to read and write in memory without being controled
+by an external force. When a human deletes data on a computer, they are
+essentially reallocating space in their memory for future data to be stored.
+In this same manner, the DNC automatically learns when to reallocate memory
+based on the task given. So as the name suggests, the DNC can be thought of
+as a differentiable computer. This does not mean that a DNC will ever take the
+place of a modern day computer because the applications are different. When
+we interact with a computer, we expect the memory to always be there regardless
+of how often we may use it. Having the computer automatically erase data
+because it thinks you do not need it would be very unfavorable for many users.
+However, a DNC is a model that learns how to represent complex data
+structures to solve difficult tasks that cannot otherwise be solved.
+
+The DNC has been found to be useful in a variety of experimental applications.
+The researchers show that the DNC outperforms the previous best models in
+a synthetic question answering task using the bAbI dataset
+\cite{graves2016hybrid}. The following example shows that the DNC is able to
+combine supporting facts together to come up with a solution
+\cite{graves2016hybrid}:
+\begin{align*}
+\textnormal{\bf{Input: }}  & \quad \textnormal{John is in the playground. John
+                                               picked up the football.} \\
+\textnormal{\bf{Input: }}  & \quad \textnormal{Where is the football?} \\
+\textnormal{\bf{Output: }} & \quad \textnormal{playground.}
+\end{align*}
+An even more complex task is to still be able to combine supporting facts
+but also have resilience to distractors in the input \cite{graves2016hybrid}:
+\begin{align*}
+\textnormal{\bf{Input: }}  & \quad \textnormal{Sheep are afraid of wolves.
+                             Gertrude is a sheep.} \\
+                           & \quad \textnormal{Mice are afraid of cats.} \\
+\textnormal{\bf{Input: }}  & \quad \textnormal{What is Gertrude afraid of?} \\
+\textnormal{\bf{Output: }} & \quad \textnormal{wolves.}
+\end{align*}
+This example requires the DNC to have textual reasoning and be able to ignore
+the last sentence that is unecessary to answer the question. This shows that
+the differentiable attention mechanisms in the DNC are working and capable
+of handling complex tasks such as this.
+
+To test how the DNC handles data structures, the researchers explored
+performance on graph problems: \textit{traversal}, \textit{shortest path},
+\textit{inference} \cite{graves2016hybrid}. Before the model was asked to solve
+one of these problems, it would first receive a graph as input. The model would
+learn how to represent this graph in external memory. When the model is asked
+to complete a traversal task, it receives a starting node and a path in the
+graph \cite{graves2016hybrid}. The model must then output the ending node of
+the path, requiring a traversal through the graph \cite{graves2016hybrid}.
+The shortest path problem was given by a start and end node
+\cite{graves2016hybrid}. The model must output the in-order path from start to
+end. The inference task is given by an incomplete triple
+(\quotes{from node}, \quotes{to node}, \quotes{relation}), where one of the
+three were missing \cite{graves2016hybrid}. For example, if \quotes{to node} is
+missing from the input, the model must infer what node has the given
+relationship with \quotes{from node}. In the example of a family tree, one
+might ask (\quotes{Jen}, \quotes{\_}, \quotes{MaternalGreatUncle}). For which,
+if Joe is Jen's Maternal-Great-Uncle, then the model is expected to output
+the triple (\quotes{Jen}, \quotes{Joe}, \quotes{MaternalGreatUncle}). This task
+requires the model to not only learn how to traverse the graphs, but to learn
+the meaning of relationships.
+
+When the three graph problems were tested on the DNC and a baseline LSTM, the
+DNC produced much better results while the LSTM failed to even learn the
+easiest task of traversal \cite{graves2016hybrid}. When tested on randomly
+generated paths of length seven, the DNC performed with an accuracy of 98.8\%
+and the LSTM performed with an accuracy of 37\% \cite{graves2016hybrid}. This
+shows how the DNC can solve problems otherwise unsolvable because the DNC has
+an external memory with read and write access. The DNC performed at an accuracy
+of 55.3\% when tested on shortest paths of length four \cite{graves2016hybrid}.
+On the last task, inference, the DNC performed with accuracy 81.8\% when tested
+on relationships that connect nodes with distance four \cite{graves2016hybrid}.
