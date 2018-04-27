@@ -12,6 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #==============================================================================
+
+"""
+Model for Figure:
+python3 -m src.tasks.train --controller=ff --num_read_heads=1 --memory_size=10
+    --word_size=3 --batch_size=10 --max_repeats=1 --gpu_usage=0.8 --num_bits=6
+    --min_length=5 --max_length=5
+    --checkpoint_dir=src/tasks/repeat_copy/checkpoints
+    --checkpoint_basename=model-word-size-3.ckpt --checkpoint_interval=10000
+    --num_training_iterations=100000
+"""
+
 """A repeat copy task."""
 from __future__ import absolute_import
 from __future__ import division
@@ -115,7 +126,7 @@ def bitstring_readable(data, batch_size, model_output=None, whole_batch=False):
 
 
 def readable_model(model_state, batch_size, whole_batch=False):
-    """Produces a readable representation of the model state.
+    """Produce a readable representation of the model state.
 
     Args:
         model_state: A tuple given by the DNC representing the internal state
@@ -128,7 +139,7 @@ def readable_model(model_state, batch_size, whole_batch=False):
         A string used to visualize the model state.
     """
     format_string = \
-      "\nRead Weights  = {}\n" \
+        "\nRead Weights  = {}\n" \
         "Write Weights = {}\n" \
         "Free Gate     = {}\n" \
         "Alloc. Gate   = {}\n"
@@ -146,6 +157,7 @@ def readable_model(model_state, batch_size, whole_batch=False):
 
 
 def arr_to_str(a):
+    """Create more readable array to string."""
     output = "["
     for i in range(len(a)):
         output += str(a[i])
@@ -157,6 +169,7 @@ def arr_to_str(a):
 
 
 def figure_data(data, output, model_state, batch_size):
+    """Create string with data from the model."""
     input_str = "\n# shape = {}\nobs_str = np.array([\n".format(
         str(data.input.shape))
     for batch_index in range(batch_size):
@@ -209,7 +222,6 @@ def figure_data(data, output, model_state, batch_size):
     ag_str += "])"
     return input_str + "\n" + output_str + "\n" + rw_str + "\n" + ww_str \
         + "\n" + fg_str + "\n" + ag_str + "\n"
-
 
 
 class RepeatCopy(snt.AbstractModule):
