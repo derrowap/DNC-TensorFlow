@@ -12,17 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #==============================================================================
-
-"""
-Model for Figure:
-python3 -m src.tasks.train --controller=ff --num_read_heads=1 --memory_size=10
-    --word_size=3 --batch_size=10 --max_repeats=1 --gpu_usage=0.8 --num_bits=6
-    --min_length=5 --max_length=5
-    --checkpoint_dir=src/tasks/repeat_copy/checkpoints
-    --checkpoint_basename=model-word-size-3.ckpt --checkpoint_interval=10000
-    --num_training_iterations=100000
-"""
-
 """A repeat copy task."""
 from __future__ import absolute_import
 from __future__ import division
@@ -35,6 +24,16 @@ import tensorflow as tf
 
 DatasetTensors = collections.namedtuple('DatasetTensors', ('input',
                                                            'target', 'mask'))
+
+"""
+Model for Figure:
+python3 -m src.tasks.train --controller=ff --num_read_heads=1 --memory_size=10
+    --word_size=3 --batch_size=10 --max_repeats=1 --gpu_usage=0.8 --num_bits=6
+    --min_length=5 --max_length=5
+    --checkpoint_dir=src/tasks/repeat_copy/checkpoints
+    --checkpoint_basename=model-word-size-3.ckpt --checkpoint_interval=10000
+    --num_training_iterations=100000
+"""
 
 
 def masked_sigmoid_cross_entropy(logits,
