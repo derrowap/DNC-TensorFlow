@@ -4,19 +4,24 @@
 \usepackage{graphicx}
 \usepackage[autostyle]{csquotes}
 \usepackage{amsmath}
+\usepackage{subcaption}
+\usepackage{array}
+\newcolumntype{P}[1]{>{\centering\arraybackslash}p{#1}}
+\usepackage[labelfont=bf]{caption}
 \usepackage{indentfirst}
 \graphicspath{{resources/}}
 \usepackage[a4paper,width=150mm,top=25mm,bottom=25mm]{geometry}
 \usepackage{fancyhdr}
 \pagestyle{fancy}
 \fancyhead{}
-\fancyhead[RO,L]{Thesis Title}
+\lhead{Thesis Title}
 \fancyfoot{}
-\fancyfoot[L,RO]{\thepage}
-\fancyfoot[LO,C]{Chapter \thechapter}
-\fancyfoot[CO,R]{Austin Derrow-Pinion}
+\rfoot{\thepage}
+\lfoot[LO,C]{Chapter \thechapter}
 \renewcommand{\headrulewidth}{0.4pt}
 \renewcommand{\footrulewidth}{0.4pt}
+
+\newcommand{\quotes}[1]{\lq{#1}\rq}
 
 % bibliography resources
 \usepackage{biblatex}
@@ -38,18 +43,25 @@
 \chapter{Introduction}
 \input{sections/introduction}
 
-\chapter{Dynamic Memory Allocation}
+\chapter{Background}
+\input{sections/background}
+
+\chapter{Procedures}
+\section{Dynamic Memory Allocation}
 \input{sections/repeat_copy}
 
-\chapter{Extraction-Based Summarization Task}
-\input{sections/stack_exchange_tags}
+\section{DNA Sequencing for Pre-Segmented MinION Nanopore Reads}
+\input{sections/dna_sequencing}
+
+% \chapter{Extraction-Based Summarization Task}
+% \input{sections/stack_exchange_tags}
 
 \chapter{Conclusion}
 \input{sections/conclusion}
 
-\appendix
-\chapter{Appendix Title}
-\input{sections/appendix}
+% \appendix
+% \chapter{Appendix Title}
+% \input{sections/appendix}
 
 \printbibliography
 
